@@ -5,3 +5,10 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .vercel
+.env
+.env.*
+!.env.example
+logs/*
+uploads/*
+!uploads/.gitkeep
+!logs/.gitkeep
