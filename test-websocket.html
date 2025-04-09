@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .drawing-area {
+            border: 1px solid #ddd;
+            background-color: white;
+            cursor: crosshair;
+            margin: 20px 0;
+        }
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        input[type="color"] {
+            height: 32px;
+            width: 50px;
+            padding: 0;
+            border: 1px solid #ddd;
+        }
+        .log {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            padding: 10px;
+            height: 150px;
+            overflow-y: auto;
+            margin-top: 20px;
+            font-family: monospace;
+        }
+        .status {
+            margin-top: 15px;
+            font-weight: bold;
+        }
+        .status.connected {
+            color: green;
+        }
+        .status.disconnected {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket Drawing Test</h1>
+        
+        <div class="status disconnected" id="connectionStatus">Disconnected</div>
+        
+        <div class="controls">
+            <input type="text" id="drawingId" placeholder="Enter Drawing ID" value="test-drawing-123">
+            <button id="connectBtn">Connect</button>
+            <button id="disconnectBtn">Disconnect</button>
+            <input type="color" id="colorPicker" value="#000000">
+            <button id="clearBtn">Clear Canvas</button>
+        </div>
+        
+        <canvas id="drawingCanvas" class="drawing-area" width="700" height="400"></canvas>
+        
+        <div class="log" id="logArea"></div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const drawingIdInput = document.getElementById('drawingId');
+        const colorPicker = document.getElementById('colorPicker');
+        const clearBtn = document.getElementById('clearBtn');
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusEl = document.getElementById('connectionStatus');
+        const logArea = document.getElementById('logArea');
+        
+        // Drawing state
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        
+        // WebSocket state
+        let socket = null;
+        let connected = false;
+        
+        // Initialize canvas
+        function initCanvas() {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.lineWidth = 2;
+        }
+        
+        // Add log entry
+        function log(message) {
+            const entry = document.createElement('div');
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            logArea.appendChild(entry);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+        
+        // Connect to WebSocket server
+        function connect() {
+            const drawingId = drawingIdInput.value.trim();
+            if (!drawingId) {
+                alert('Please enter a drawing ID');
+                return;
+            }
+            
+            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            log(`Connecting to ${wsUrl} for drawing ${drawingId}...`);
+            
+            try {
+                socket = new WebSocket(wsUrl);
+                
+                socket.onopen = () => {
+                    connected = true;
+                    statusEl.textContent = 'Connected';
+                    statusEl.className = 'status connected';
+                    log('WebSocket connection established');
+                    
+                    // Join the drawing room
+                    socket.send(JSON.stringify({
+                        type: 'join',
+                        drawingId
+                    }));
+                };
+                
+                socket.onmessage = (event) => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        handleMessage(message);
+                    } catch (error) {
+                        log(`Error parsing message: ${error.message}`);
+                    }
+                };
+                
+                socket.onerror = (error) => {
+                    log(`WebSocket error: ${error.message}`);
+                    statusEl.textContent = 'Error';
+                    statusEl.className = 'status disconnected';
+                };
+                
+                socket.onclose = () => {
+                    connected = false;
+                    statusEl.textContent = 'Disconnected';
+                    statusEl.className = 'status disconnected';
+                    log('WebSocket connection closed');
+                };
+            } catch (error) {
+                log(`Failed to create WebSocket: ${error.message}`);
+            }
+        }
+        
+        // Handle incoming WebSocket messages
+        function handleMessage(message) {
+            switch (message.type) {
+                case 'joined':
+                    log(`Joined drawing ${message.drawingId} with ${message.clients} client(s)`);
+                    break;
+                    
+                case 'draw':
+                    drawRemote(message.drawData);
+                    break;
+                    
+                case 'clientJoined':
+                    log(`New client joined - Total clients: ${message.clients}`);
+                    break;
+                    
+                case 'clientLeft':
+                    log(`Client left - Remaining clients: ${message.clients}`);
+                    break;
+                    
+                default:
+                    log(`Received unknown message type: ${message.type}`);
+            }
+        }
+        
+        // Disconnect from WebSocket server
+        function disconnect() {
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+        }
+        
+        // Start drawing
+        function startDrawing(e) {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            [lastX, lastY] = [
+                e.clientX - rect.left,
+                e.clientY - rect.top
+            ];
+        }
+        
+        // Draw on the canvas and send data to server
+        function draw(e) {
+            if (!isDrawing) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Draw on local canvas
+            ctx.strokeStyle = colorPicker.value;
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            
+            // Send drawing data to server
+            if (connected && socket) {
+                const drawData = {
+                    prevX: lastX,
+                    prevY: lastY,
+                    x: x,
+                    y: y,
+                    color: colorPicker.value,
+                    width: ctx.lineWidth,
+                    tool: 'pen'
+                };
+                
+                socket.send(JSON.stringify({
+                    type: 'draw',
+                    drawData: drawData
+                }));
+            }
+            
+            [lastX, lastY] = [x, y];
+        }
+        
+        // Draw data received from remote client
+        function drawRemote(drawData) {
+            const { prevX, prevY, x, y, color, width } = drawData;
+            
+            const prevLineWidth = ctx.lineWidth;
+            const prevStrokeStyle = ctx.strokeStyle;
+            
+            ctx.lineWidth = width;
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(prevX, prevY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            
+            // Restore previous settings
+            ctx.lineWidth = prevLineWidth;
+            ctx.strokeStyle = prevStrokeStyle;
+        }
+        
+        // Stop drawing
+        function stopDrawing() {
+            isDrawing = false;
+        }
+        
+        // Clear the canvas
+        function clearCanvas() {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        clearBtn.addEventListener('click', clearCanvas);
+        
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+        
+        // Initialize
+        initCanvas();
+    </script>
+</body>
+</html>

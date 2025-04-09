@@ -1,0 +1,130 @@
+firebase deploy --only functions
+
+
+=== Deploying to 'notezhubz'...
+
+i  deploying functions
+Running command: npm --prefix "$RESOURCE_DIR" run build
+
+> build
+> tsc
+
+src/index.ts:10:1 - error TS6133: 'onRequest' is declared but its value is never read.
+
+10 import {onRequest} from "firebase-functions/v2/https";
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/index.ts:11:1 - error TS6133: 'logger' is declared but its value is never read.
+
+11 import * as logger from "firebase-functions/logger";
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/index.ts:24:1 - error TS6133: 'cors' is declared but its value is never read.
+
+24 import cors from 'cors';
+   ~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/index.ts:39:7 - error TS6133: 'allowedOrigins' is declared but its value is never read.
+
+39 const allowedOrigins = [
+         ~~~~~~~~~~~~~~
+
+src/index.ts:53:9 - error TS7030: Not all code paths return a value.
+
+53 app.use((req, res, next) => {
+           ~~~~~~~~~~~~~~~~~~~~~
+
+src/routes.ts:1:43 - error TS6196: 'NextFunction' is declared but never used.
+
+1 import type { Express, Request, Response, NextFunction } from "express";
+                                            ~~~~~~~~~~~~
+
+src/routes.ts:3:25 - error TS2307: Cannot find module './storage' or its corresponding type declarations.
+
+3 import { storage } from "./storage";
+                          ~~~~~~~~~~~
+
+src/routes.ts:4:1 - error TS6192: All imports in import declaration are unused.
+
+4 import { db, sql } from "./db";
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/routes.ts:4:25 - error TS2307: Cannot find module './db' or its corresponding type declarations.
+
+4 import { db, sql } from "./db";
+                          ~~~~~~
+
+src/routes.ts:5:1 - error TS6192: All imports in import declaration are unused.
+
+5 import { notes, drawings } from "@shared/schema";
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/routes.ts:5:33 - error TS2307: Cannot find module '@shared/schema' or its corresponding type declarations.
+
+5 import { notes, drawings } from "@shared/schema";
+                                  ~~~~~~~~~~~~~~~~
+
+src/routes.ts:6:1 - error TS6133: 'eq' is declared but its value is never read.
+
+6 import { eq } from "drizzle-orm";
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/routes.ts:22:8 - error TS6133: 'User' is declared but its value is never read.
+
+22   type User
+          ~~~~
+
+src/routes.ts:23:8 - error TS2307: Cannot find module '@shared/schema' or its corresponding type declarations.
+
+23 } from "@shared/schema";
+          ~~~~~~~~~~~~~~~~
+
+src/routes.ts:28:10 - error TS6133: 'sanitizeObject' is declared but its value is never read.
+
+28 import { sanitizeObject, sanitizeUserText, sanitizeUserHtml } from "./utils";
+            ~~~~~~~~~~~~~~
+
+src/routes.ts:28:44 - error TS6133: 'sanitizeUserHtml' is declared but its value is never read.
+
+28 import { sanitizeObject, sanitizeUserText, sanitizeUserHtml } from "./utils";
+                                              ~~~~~~~~~~~~~~~~
+
+src/routes.ts:28:68 - error TS2307: Cannot find module './utils' or its corresponding type declarations.
+
+28 import { sanitizeObject, sanitizeUserText, sanitizeUserHtml } from "./utils";
+                                                                      ~~~~~~~~~
+
+src/routes.ts:29:24 - error TS6133: 'sanitizeFilenameForStorage' is declared but its value is never read.
+
+29 import { validateFile, sanitizeFilenameForStorage, ALLOWED_FILE_TYPES } from "./file-security";
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/routes.ts:29:52 - error TS6133: 'ALLOWED_FILE_TYPES' is declared but its value is never read.
+
+29 import { validateFile, sanitizeFilenameForStorage, ALLOWED_FILE_TYPES } from "./file-security";
+                                                      ~~~~~~~~~~~~~~~~~~
+
+src/routes.ts:29:78 - error TS2307: Cannot find module './file-security' or its corresponding type declarations.
+
+29 import { validateFile, sanitizeFilenameForStorage, ALLOWED_FILE_TYPES } from "./file-security";
+                                                                                ~~~~~~~~~~~~~~~~~
+
+src/routes.ts:30:1 - error TS6133: 'log' is declared but its value is never read.
+
+30 import { log } from "./vite";
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+src/routes.ts:31:53 - error TS6133: 'verifyToken' is declared but its value is never read.
+
+31 import { generateAccessToken, generateRefreshToken, verifyToken, extractToken } from "./jwt";
+                                                       ~~~~~~~~~~~
+
+src/routes.ts:31:66 - error TS6133: 'extractToken' is declared but its value is never read.
+
+31 import { generateAccessToken, generateRefreshToken, verifyToken, extractToken } from "./jwt";
+                                                                    ~~~~~~~~~~~~
+
+src/routes.ts:31:86 - error TS2307: Cannot find module './jwt' or its corresponding type declarations.
+
+31 import { generateAccessToken, generateRefreshToken, verifyToken, extractToken } from "./jwt";
+                 ...
