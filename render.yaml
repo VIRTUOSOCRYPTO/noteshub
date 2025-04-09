@@ -3,14 +3,10 @@ services:
     name: noteshub-backend
     env: node
     plan: free
-    buildCommand: chmod +x build-render.sh && ./build-render.sh
-    startCommand: chmod +x start-render.sh && ./start-render.sh
+    buildCommand: chmod +x build-simple.sh && ./build-simple.sh
+    startCommand: chmod +x start-simple.sh && ./start-simple.sh
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
-      - key: FORCE_SECURE_COOKIES
-        value: true
-      - key: FORCE_HSTS
-        value: true
