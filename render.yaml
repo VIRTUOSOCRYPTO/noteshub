@@ -2,6 +2,7 @@ services:
   - type: web
     name: noteshub-backend
     env: node
+    plan: free
     buildCommand: chmod +x build-render.sh && ./build-render.sh
     startCommand: chmod +x start-render.sh && ./start-render.sh
     envVars:
@@ -13,9 +14,3 @@ services:
         value: true
       - key: FORCE_HSTS
         value: true
-      - key: DATABASE_URL
-        sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_KEY
-        sync: false
