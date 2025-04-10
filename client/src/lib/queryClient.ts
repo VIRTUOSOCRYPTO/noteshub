@@ -77,9 +77,9 @@ export const getQueryFn: <T>(options: {
       ? { 'Authorization': `Bearer ${token}` }
       : {};
         
-    // In production, use omit credentials mode to avoid CORS issue with credentials
-    // In development, keep include mode for local testing
-    const credentialsMode = import.meta.env.PROD ? 'omit' : 'include';
+    // In production, use 'same-origin' credentials mode to avoid CORS issues
+    // In development, keep 'include' mode for local testing with cookies
+    const credentialsMode = import.meta.env.PROD ? 'same-origin' : 'include';
     
     // Use the secure fetch implementation with certificate pinning
     const res = await apiFetch(fullUrl, {
@@ -131,27 +131,34 @@ export const queryClient = new QueryClient({
  */
 export const authenticateWithGoogle = async (email: string, idToken: string) => {
   try {
-    // For Google auth, we need to explicitly set credentials mode
-    const credentialsMode = import.meta.env.PROD ? 'omit' : 'include';
+    // Direct fetch to avoid compatibility issues
+    const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    const url = `${baseUrl}/api/auth/google`;
     
-    const response = await apiRequest('POST', '/api/auth/google', {
-      idToken,
-      email
-    }, { credentials: credentialsMode });
+    // In production, use same-origin credentials mode to avoid CORS issues
+    const credentialsMode = import.meta.env.PROD ? 'same-origin' : 'include';
     
-    // Safely parse JSON response
-    try {
-      const contentType = response.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        return await response.json();
-      } else {
-        console.error('Non-JSON response received from API:', await response.text());
-        throw new Error('Received non-JSON response from server');
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ idToken, email }),
+      credentials: credentialsMode
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `Error: ${response.status} ${response.statusText}`;
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorData.message || errorMessage;
+      } catch (e) {
+        // Fall back to default message
       }
-    } catch (error) {
-      console.error('Failed to parse JSON response:', error);
-      throw new Error('Failed to parse response from server');
+      throw new Error(errorMessage);
     }
+    
+    return await response.json();
   } catch (error) {
     console.error('Error authenticating with Google:', error);
     throw error;
