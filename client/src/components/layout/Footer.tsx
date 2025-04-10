@@ -1,6 +1,6 @@
 import { School, BookOpen, Mail } from "lucide-react";
 import { Link } from "wouter";
-import { DatabaseStatus } from "../DatabaseStatus.tsx";
+import { DatabaseStatusIndicator } from "../DatabaseStatus";
 
 export default function Footer() {
   return (
@@ -67,7 +67,7 @@ export default function Footer() {
           </div>
           <div className="mt-2 md:mt-0 flex items-center space-x-2">
             <span className="text-xs text-gray-500">System Status:</span>
-            <DatabaseStatus />
+            <DatabaseStatusIndicator />
           </div>
         </div>
       </div>
