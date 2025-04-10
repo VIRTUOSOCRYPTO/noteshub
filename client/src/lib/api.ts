@@ -25,8 +25,13 @@ const getApiBaseUrl = (): string => {
 };
 
 // Get the appropriate fetch implementation based on environment
+// Temporarily use window.fetch everywhere to debug connection issues
 const getFetchImplementation = (): typeof fetch => {
-  return import.meta.env.PROD ? pinnedFetch : window.fetch;
+  // Use regular fetch for now until we debug all connectivity issues
+  return window.fetch;
+  
+  // Original implementation that we'll return to after fixing issues:
+  // return import.meta.env.PROD ? pinnedFetch : window.fetch;
 };
 
 // API base URL to be used for all requests
@@ -34,6 +39,11 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.PROD 
     ? "https://notezhub.onrender.com" 
     : "");
+
+// Log the API base URL for debugging (not in production)
+if (import.meta.env.DEV) {
+  console.log('API Base URL:', API_BASE_URL);
+}
 
 // Auth token storage
 let authToken: string | null = null;
