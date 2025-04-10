@@ -39,6 +39,10 @@ app.use(cors({
       return callback(null, true);
     }
     
+    // In production, always allow all origins for now to debug connection issues
+    return callback(null, true);
+    
+    /* Original restrictive CORS policy - will restore after debugging
     // In production, check against allowed origins
     if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('replit.dev')) {
       return callback(null, true);
@@ -46,6 +50,7 @@ app.use(cors({
       console.log(`CORS blocked request from origin: ${origin}`);
       return callback(null, true); // Still allow but log it
     }
+    */
   },
   credentials: true, // This is important for cookies, sessions, etc.
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -124,22 +129,23 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       "worker-src 'self' blob:;"
     );
   } else {
-    // More permissive for production to avoid blocking legitimate connections
-    res.setHeader('Content-Security-Policy', 
-      "default-src * 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://* http://*; " + 
-      "style-src 'self' 'unsafe-inline' https://* http://*; " +
-      "img-src 'self' data: blob: https://* http://*; " +
-      "font-src 'self' data: https://* http://*; " +
-      "object-src 'none'; " +
-      "connect-src 'self' https://* http://* wss://* ws://*; " +
-      "frame-ancestors 'none'; " +
-      "base-uri 'self'; " +
-      "form-action 'self' https://* http://*; " +
-      "manifest-src 'self' https://* http://*; " +
-      "media-src 'self' https://* http://*; " +
-      "worker-src 'self' blob: https://* http://*;"
-    );
+    // Temporarily disable CSP in production for debugging connection issues
+    // Will re-enable after fixing connection issues
+    // res.setHeader('Content-Security-Policy', 
+    //   "default-src * 'self'; " +
+    //   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://* http://*; " + 
+    //   "style-src 'self' 'unsafe-inline' https://* http://*; " +
+    //   "img-src 'self' data: blob: https://* http://*; " +
+    //   "font-src 'self' data: https://* http://*; " +
+    //   "object-src 'none'; " +
+    //   "connect-src 'self' https://* http://* wss://* ws://*; " +
+    //   "frame-ancestors 'none'; " +
+    //   "base-uri 'self'; " +
+    //   "form-action 'self' https://* http://*; " +
+    //   "manifest-src 'self' https://* http://*; " +
+    //   "media-src 'self' https://* http://*; " +
+    //   "worker-src 'self' blob: https://* http://*;"
+    // );
   }
   
   // In production, apply HSTS
