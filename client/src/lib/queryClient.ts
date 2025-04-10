@@ -3,8 +3,30 @@ import { apiFetch, API_BASE_URL } from "./api";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let errorText;
+    try {
+      // Try to parse as JSON
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await res.json();
+        errorText = errorData.error || errorData.message || res.statusText;
+      } else {
+        // Not JSON, just get text
+        errorText = await res.text();
+      }
+    } catch (parseError) {
+      console.error('Error parsing response:', parseError);
+      errorText = `Failed to parse response: ${res.statusText}`;
+    }
+    
+    const errorMessage = `${res.status}: ${errorText}`;
+    console.error(`API Error: ${errorMessage}`, { 
+      url: res.url,
+      status: res.status,
+      statusText: res.statusText 
+    });
+    
+    throw new Error(errorMessage);
   }
 }
 
@@ -20,7 +42,7 @@ export async function apiRequest(
     ? url 
     : url.startsWith('/') 
       ? `${API_BASE_URL}${url}` 
-      : `${API_BASE_URL}/${url}`;
+      : url;
   
   // Use the secure fetch implementation with certificate pinning
   const res = await apiFetch(fullUrl, {
@@ -45,13 +67,20 @@ export const getQueryFn: <T>(options: {
     // Create full URL if needed (add base URL for API paths)
     const fullUrl = endpoint.startsWith('http') 
       ? endpoint 
-      : endpoint.startsWith('/') 
+      : endpoint.startsWith('/api') 
         ? `${API_BASE_URL}${endpoint}` 
         : endpoint;
     
+    // Get auth token if available
+    const token = localStorage.getItem('auth_token');
+    const headers: HeadersInit = token 
+      ? { 'Authorization': `Bearer ${token}` }
+      : {};
+        
     // Use the secure fetch implementation with certificate pinning
     const res = await apiFetch(fullUrl, {
       credentials: "include",
+      headers
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
@@ -59,7 +88,20 @@ export const getQueryFn: <T>(options: {
     }
 
     await throwIfResNotOk(res);
-    return await res.json();
+    
+    // Safely parse JSON response
+    try {
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await res.json();
+      } else {
+        console.error('Non-JSON response received from API:', await res.text());
+        throw new Error('Received non-JSON response from server');
+      }
+    } catch (error) {
+      console.error('Failed to parse JSON response:', error);
+      throw new Error('Failed to parse response from server');
+    }
   };
 
 export const queryClient = new QueryClient({
@@ -90,7 +132,19 @@ export const authenticateWithGoogle = async (email: string, idToken: string) => 
       email
     });
     
-    return await response.json();
+    // Safely parse JSON response
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+      } else {
+        console.error('Non-JSON response received from API:', await response.text());
+        throw new Error('Received non-JSON response from server');
+      }
+    } catch (error) {
+      console.error('Failed to parse JSON response:', error);
+      throw new Error('Failed to parse response from server');
+    }
   } catch (error) {
     console.error('Error authenticating with Google:', error);
     throw error;
