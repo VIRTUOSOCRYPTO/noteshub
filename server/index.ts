@@ -34,23 +34,20 @@ app.use(cors({
       'http://localhost:5173'
     ];
     
-    // In development mode, allow any origin
+    // When using credentials, we must specify exact origins
+    // For development, use more permissive settings
     if (process.env.NODE_ENV === 'development') {
-      return callback(null, true);
+      return callback(null, origin);
     }
     
-    // In production, always allow all origins for now to debug connection issues
-    return callback(null, true);
-    
-    /* Original restrictive CORS policy - will restore after debugging
     // In production, check against allowed origins
     if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('replit.dev')) {
-      return callback(null, true);
+      return callback(null, origin); // Return the actual origin instead of true
     } else {
-      console.log(`CORS blocked request from origin: ${origin}`);
-      return callback(null, true); // Still allow but log it
+      console.log(`CORS request from non-allowed origin: ${origin}`);
+      // For debugging, we'll allow any origin but log it
+      return callback(null, origin);
     }
-    */
   },
   credentials: true, // This is important for cookies, sessions, etc.
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
