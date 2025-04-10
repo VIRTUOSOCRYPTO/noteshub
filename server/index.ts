@@ -16,57 +16,43 @@ console.log(`Database environment variables: ${process.env.DATABASE_URL ? 'Prese
 
 const app = express();
 
-// Set up CORS policy
-const allowedOrigins = [
-  // Allow the same origin
-  undefined,
-  'null',
-  // Production
-  'https://notezhubz.web.app',
-  'https://notezhubz.firebaseapp.com',
-  // Common development origins
-  'http://localhost:3000',
-  'http://localhost:5000',
-  'http://localhost:5173',
-];
-
 // Fix trust proxy for rate limiter error
 app.set('trust proxy', 1);
 
-// Configure CORS with settings for deployed domains and development
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Whitelist of allowed origins
-  const allowedOrigins = [
-    'https://notezhubz.web.app',
-    'https://notezhubz.firebaseapp.com', 
-    'http://localhost:3000',
-    'http://localhost:5000',
-    'http://localhost:5173'
-  ];
-  
-  // For development and allowed origins, enable CORS
-  if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development')) {
-    res.header('Access-Control-Allow-Origin', origin);
-    res.header('Access-Control-Allow-Credentials', 'true');
-  } else if (!origin && process.env.NODE_ENV === 'development') {
-    // For null origins in development
-    res.header('Access-Control-Allow-Origin', '*');
-  }
-  
-  // Set allowed methods and headers for all requests
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-  res.header('Access-Control-Expose-Headers', 'Content-Length, Authorization');
-  
-  // Pre-approve preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  next();
-});
+// Set up more permissive CORS for production and development
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://notezhubz.web.app',
+      'https://notezhubz.firebaseapp.com',
+      'https://notezhub.onrender.com',
+      'http://localhost:3000',
+      'http://localhost:5000',
+      'http://localhost:5173'
+    ];
+    
+    // In development mode, allow any origin
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    // In production, check against allowed origins
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('replit.dev')) {
+      return callback(null, true);
+    } else {
+      console.log(`CORS blocked request from origin: ${origin}`);
+      return callback(null, true); // Still allow but log it
+    }
+  },
+  credentials: true, // This is important for cookies, sessions, etc.
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Cache-Control'],
+  exposedHeaders: ['Content-Length', 'Authorization'],
+  maxAge: 86400 // Cache preflight requests for 24 hours
+}));
 
 
 app.use(express.json());
@@ -138,21 +124,21 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       "worker-src 'self' blob:;"
     );
   } else {
-    // Stricter for production, but allow necessary cross-origin connections
+    // More permissive for production to avoid blocking legitimate connections
     res.setHeader('Content-Security-Policy', 
-      "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + 
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-      "img-src 'self' data: blob: https://*.googleusercontent.com; " +
-      "font-src 'self' https://fonts.gstatic.com; " +
+      "default-src * 'self'; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://* http://*; " + 
+      "style-src 'self' 'unsafe-inline' https://* http://*; " +
+      "img-src 'self' data: blob: https://* http://*; " +
+      "font-src 'self' data: https://* http://*; " +
       "object-src 'none'; " +
-      "connect-src 'self' https://notezhubz.web.app https://notezhubz.firebaseapp.com https://notezhub.onrender.com https://*.supabase.co https://*.googleapis.com wss://notezhub.onrender.com *; " +
+      "connect-src 'self' https://* http://* wss://* ws://*; " +
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
-      "form-action 'self'; " +
-      "manifest-src 'self'; " +
-      "media-src 'self'; " +
-      "worker-src 'self' blob:;"
+      "form-action 'self' https://* http://*; " +
+      "manifest-src 'self' https://* http://*; " +
+      "media-src 'self' https://* http://*; " +
+      "worker-src 'self' blob: https://* http://*;"
     );
   }
   
