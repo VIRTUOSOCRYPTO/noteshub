@@ -102,9 +102,9 @@ export const apiRequest = async <T = any>(
     headers = { ...headers, ...options.headers };
   }
 
-  // In production, use omit credentials mode to avoid CORS issue with credentials
-  // In development, keep include mode for local testing
-  const credentialsMode = import.meta.env.PROD ? 'omit' : 'include';
+  // In production, use 'same-origin' credentials mode to avoid CORS issues
+  // In development, keep 'include' mode for local testing with cookies
+  const credentialsMode = import.meta.env.PROD ? 'same-origin' : 'include';
   
   const defaultOptions: RequestInit = {
     headers,
