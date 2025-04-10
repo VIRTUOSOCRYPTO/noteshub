@@ -35,18 +35,12 @@ app.use(cors({
     ];
     
     // When using credentials, we must specify exact origins
-    // For development, use more permissive settings
-    if (process.env.NODE_ENV === 'development') {
-      return callback(null, origin);
-    }
-    
-    // In production, check against allowed origins
     if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('replit.dev')) {
-      return callback(null, origin); // Return the actual origin instead of true
+      return callback(null, origin); // Return the actual origin instead of '*'
     } else {
       console.log(`CORS request from non-allowed origin: ${origin}`);
-      // For debugging, we'll allow any origin but log it
-      return callback(null, origin);
+      // Only allow listed origins when credentials are used
+      return callback(new Error('Not allowed by CORS'), false);
     }
   },
   credentials: true, // This is important for cookies, sessions, etc.
@@ -126,23 +120,22 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       "worker-src 'self' blob:;"
     );
   } else {
-    // Temporarily disable CSP in production for debugging connection issues
-    // Will re-enable after fixing connection issues
-    // res.setHeader('Content-Security-Policy', 
-    //   "default-src * 'self'; " +
-    //   "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://* http://*; " + 
-    //   "style-src 'self' 'unsafe-inline' https://* http://*; " +
-    //   "img-src 'self' data: blob: https://* http://*; " +
-    //   "font-src 'self' data: https://* http://*; " +
-    //   "object-src 'none'; " +
-    //   "connect-src 'self' https://* http://* wss://* ws://*; " +
-    //   "frame-ancestors 'none'; " +
-    //   "base-uri 'self'; " +
-    //   "form-action 'self' https://* http://*; " +
-    //   "manifest-src 'self' https://* http://*; " +
-    //   "media-src 'self' https://* http://*; " +
-    //   "worker-src 'self' blob: https://* http://*;"
-    // );
+    // Enable CSP in production with allowed origins
+    res.setHeader('Content-Security-Policy', 
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + 
+      "style-src 'self' 'unsafe-inline'; " +
+      "img-src 'self' data: blob:; " +
+      "font-src 'self'; " +
+      "object-src 'none'; " +
+      "connect-src 'self' https://notezhubz.web.app https://notezhubz.firebaseapp.com https://notezhub.onrender.com; " +
+      "frame-ancestors 'none'; " +
+      "base-uri 'self'; " +
+      "form-action 'self'; " +
+      "manifest-src 'self'; " +
+      "media-src 'self'; " +
+      "worker-src 'self' blob:;"
+    );
   }
   
   // In production, apply HSTS
