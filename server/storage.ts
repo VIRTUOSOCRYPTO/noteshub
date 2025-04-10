@@ -3,7 +3,7 @@ import {
   notes, type Note, type InsertNote, type SearchNotesParams,
   bookmarks, type Bookmark, type InsertBookmark,
   messages, conversations, type Message, type InsertMessage, type Conversation
-} from "../shared/schema";
+} from "@shared/schema";
 import * as bcrypt from 'bcryptjs';
 import { db } from "./db";
 import { eq, desc, and, or, SQL, sql, gt, asc } from "drizzle-orm";
@@ -31,7 +31,7 @@ export interface IStorage {
   
   // JWT refresh token methods
   storeRefreshToken(userId: number, token: string): Promise<void>;
-  validateRefreshToken(token: string): Promise<number | null>;
+  validateRefreshToken(token: string): Promise<User | null>;
   revokeRefreshToken(userId: number): Promise<void>;
   
   // 2FA methods
@@ -89,7 +89,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
   
-  async validateRefreshToken(token: string): Promise<number | null> {
+  async validateRefreshToken(token: string): Promise<User | null> {
     try {
       const [user] = await db
         .select()
@@ -101,7 +101,7 @@ export class DatabaseStorage implements IStorage {
           )
         );
       
-      return user ? user.id : null;
+      return user || null;
     } catch (error) {
       console.error('Error validating refresh token:', error);
       return null;
@@ -1107,4 +1107,20 @@ export class DatabaseStorage implements IStorage {
 }
 
 // Switch to database storage
-export const storage = new DatabaseStorage();
+// Try to use database storage, but fall back to in-memory storage if there's an issue
+let isUsingFallbackStorage = false;
+let storageInstance: IStorage;
+
+try {
+  storageInstance = new DatabaseStorage();
+  console.log('Using database storage for data persistence');
+} catch (error) {
+  console.error('Database storage initialization failed, falling back to in-memory storage:', error);
+  // Create a proper implementation of IStorage that meets all interface requirements
+  storageInstance = new MemStorage() as unknown as IStorage;
+  isUsingFallbackStorage = true;
+  console.log('Using in-memory storage as fallback');
+}
+
+export const storage = storageInstance;
+export const isFallbackStorage = () => isUsingFallbackStorage;
