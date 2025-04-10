@@ -76,6 +76,37 @@ app.get('/test', (req, res) => {
   res.json({ message: 'CORS is working!' });
 });
 
+// Import the storage function to avoid using require
+import { isFallbackStorage } from './storage';
+
+// Database health check endpoint
+app.get('/api/db-status', (req, res) => {
+  try {
+    const usingFallback = isFallbackStorage();
+    
+    if (usingFallback) {
+      res.json({
+        status: 'warning',
+        message: 'Using in-memory storage as fallback. Data will not persist across restarts.',
+        fallback: true
+      });
+    } else {
+      res.json({
+        status: 'ok',
+        message: 'Database connection is active',
+        fallback: false
+      });
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to check database status',
+      error: errorMessage
+    });
+  }
+});
+
 
 // Apply security logger middleware
 app.use(securityLogger);
