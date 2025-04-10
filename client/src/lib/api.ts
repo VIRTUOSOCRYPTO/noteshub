@@ -6,7 +6,6 @@
  */
 
 import { pinnedFetch } from "./certificate-pinning";
-import { getApiUrl, getAccessToken, getRefreshToken, storeAuthTokens, clearAuthTokens } from "./auth-utils";
 
 // Determine the environment-specific API base URL
 const getApiBaseUrl = (): string => {
@@ -17,9 +16,11 @@ const getApiBaseUrl = (): string => {
   }
 
   if (import.meta.env.PROD) {
-    return window.location.origin;
+    // For production with Firebase hosting + Render backend
+    return 'https://notezhub.onrender.com';
   }
 
+  // For development, the default is empty string which means same-origin
   return '';
 };
 
@@ -29,9 +30,30 @@ const getFetchImplementation = (): typeof fetch => {
 };
 
 // API base URL to be used for all requests
-// In production, this should point to your Replit backend URL
-// In development, we use an empty string to make relative requests to the same origin
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.PROD 
+    ? "https://notezhub.onrender.com" 
+    : "");
+
+// Auth token storage
+let authToken: string | null = null;
+
+export const setAuthToken = (token: string) => {
+  authToken = token;
+  localStorage.setItem('auth_token', token);
+};
+
+export const getAuthToken = (): string | null => {
+  if (!authToken) {
+    authToken = localStorage.getItem('auth_token');
+  }
+  return authToken;
+};
+
+export const clearAuthToken = () => {
+  authToken = null;
+  localStorage.removeItem('auth_token');
+};
 
 // Selected fetch implementation
 export const apiFetch = getFetchImplementation();
@@ -47,65 +69,39 @@ export const apiRequest = async <T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> => {
-  // Use our utility function to get the formatted URL
-  const url = getApiUrl(endpoint);
+  // Make sure we don't double up on slashes in the URL
+  const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+  const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = baseUrl + formattedEndpoint;
 
-  // Get access token from auth utils
-  const accessToken = getAccessToken();
+  // Add auth token to headers if available
+  const token = getAuthToken();
+  
+  // Create headers object
+  let headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+  
+  // Add authorization header if token exists
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  // Merge with any headers from options
+  if (options.headers) {
+    headers = { ...headers, ...options.headers };
+  }
 
   const defaultOptions: RequestInit = {
-    headers: {
-      'Content-Type': 'application/json',
-      // Add Authorization header if we have an access token
-      ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-      ...options.headers,
-    },
-    credentials: 'include',
+    headers,
+    // Use 'include' for cross-origin requests with credentials (cookies, authorization headers)
+    credentials: 'include', 
   };
 
   const fetchOptions = { ...defaultOptions, ...options };
 
   try {
-    let response = await apiFetch(url, fetchOptions);
-
-    // If the response is 401 Unauthorized, try to refresh the token
-    const refreshToken = getRefreshToken();
-    if (response.status === 401 && refreshToken) {
-      try {
-        // Try to refresh the token
-        const refreshResponse = await fetch(getApiUrl('/api/auth/refresh-token'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
-          credentials: 'include'
-        });
-        
-        if (refreshResponse.ok) {
-          const refreshData = await refreshResponse.json();
-          
-          // Store the new tokens
-          storeAuthTokens(refreshData.accessToken, refreshData.refreshToken);
-          
-          // Retry the original request with the new token
-          const retryOptions = {
-            ...fetchOptions,
-            headers: {
-              ...fetchOptions.headers,
-              'Authorization': `Bearer ${refreshData.accessToken}`
-            }
-          };
-          
-          response = await apiFetch(url, retryOptions);
-        } else {
-          // If refresh fails, clear tokens
-          clearAuthTokens();
-        }
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        // If refresh fails, clear tokens
-        clearAuthTokens();
-      }
-    }
+    const response = await apiFetch(url, fetchOptions);
 
     if (!response.ok) {
       let errorMessage = `Error: ${response.status} ${response.statusText}`;
