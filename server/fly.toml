@@ -5,10 +5,10 @@ primary_region = "bom"
   dockerfile = "Dockerfile"
 
 [env]
-  PORT = "8080"
+  PORT = "5000"
 
 [http_service]
-  internal_port = 8080
+  internal_port = 5000
   force_https = true
   auto_start_machines = true
   auto_stop_machines = true
