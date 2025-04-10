@@ -14,14 +14,23 @@ const PINNED_CERTIFICATE_HASHES: Record<string, string[]> = {
   // In production, use actual certificate public key hashes
   'notezhub.onrender.com': [
     'sha256/DEVELOPMENT_MODE_NO_VALIDATION',
+    // Cloudflare certificates
+    'sha256/jQJTbIh0grw0/1TkHSumWb+Fs0Ggogr621gT3PvPKG0=',
+    'sha256/C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=',
     // Include multiple hashes for cert rotation
   ],
   'notezhubz.web.app': [
     'sha256/DEVELOPMENT_MODE_NO_VALIDATION',
+    // Firebase certificates
+    'sha256/UGwY2lttaRoHnGd1gpeydmsh9wL75gLqfJgBZ8m4BBY=',
+    'sha256/r/mIkG3eEpVdm+u/ko/cwxzOMo1bk4TyHIlByibiA5E=',
     // Include multiple hashes for cert rotation
   ],
   'notezhubz.firebaseapp.com': [
     'sha256/DEVELOPMENT_MODE_NO_VALIDATION',
+    // Firebase certificates
+    'sha256/UGwY2lttaRoHnGd1gpeydmsh9wL75gLqfJgBZ8m4BBY=',
+    'sha256/r/mIkG3eEpVdm+u/ko/cwxzOMo1bk4TyHIlByibiA5E=',
     // Include multiple hashes for cert rotation
   ],
   // Default hash for development environments
@@ -40,6 +49,9 @@ const isDevelopment = (): boolean => {
   return import.meta.env.DEV ||
          window.location.hostname === 'localhost' || 
          window.location.hostname === '127.0.0.1' ||
+         // For testing purposes, also consider Firebase preview channels as development
+         window.location.hostname.includes('.web.app') ||
+         window.location.hostname.includes('.firebaseapp.com') ||
          // Always return true during this development phase
          true;
 };
