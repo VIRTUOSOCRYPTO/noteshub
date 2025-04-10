@@ -1,11 +1,6 @@
-app = "notezhub-server"
-primary_region = "bom"
-
-[build]
-  dockerfile = "Dockerfile"
-
 [env]
   PORT = "5000"
+  NODE_ENV = "production"
 
 [http_service]
   internal_port = 5000
@@ -13,8 +8,3 @@ primary_region = "bom"
   auto_start_machines = true
   auto_stop_machines = true
   min_machines_running = 0
-
-[vm]
-  memory = 256
-  cpu_kind = "shared"
-  cpus = 1
