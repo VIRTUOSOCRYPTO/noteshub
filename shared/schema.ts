@@ -106,6 +106,7 @@ export const notes = pgTable("notes", {
   isFlagged: boolean("is_flagged").default(false),
   flagReason: text("flag_reason"),
   reviewedAt: timestamp("reviewed_at"),
+  isApproved: boolean("is_approved").default(true), // Added to match code usage
 });
 
 // Table for bookmarking notes (feature #4)
