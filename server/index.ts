@@ -21,47 +21,46 @@ const allowedOrigins = [
   // Allow the same origin
   undefined,
   'null',
-  // Production Firebase domains
+  // Production
   'https://notezhubz.web.app',
-  'https://notezhub.firebaseapp.com',
-  'https://noteshubb.web.app',
-  'https://noteshub-12345.web.app',
-  'https://noteshub-12345.firebaseapp.com',
-  // Local development
-  /^http:\/\/localhost:\d+$/,
-  // Replit domain - this is important for allowing the frontend to access the backend
-  /https:\/\/.*\.replit\.app$/,
-  /https:\/\/.*\.repl\.co$/,
-  'https://workspace.yash1si22ec119.repl.co'
+  'https://notezhubz.firebaseapp.com',
+  // Common development origins
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://localhost:5173',
 ];
 
 // Fix trust proxy for rate limiter error
 app.set('trust proxy', 1);
 
-// Configure CORS for both local development and production with universal access
+// Configure CORS with settings for deployed domains and development
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Check if it's a Firebase domain
-  const isFirebaseDomain = origin && (
-    origin.includes('.firebaseapp.com') || 
-    origin.includes('.web.app')
-  );
+  // Whitelist of allowed origins
+  const allowedOrigins = [
+    'https://notezhubz.web.app',
+    'https://notezhubz.firebaseapp.com', 
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://localhost:5173'
+  ];
   
-  // Allow all origins, but include credentials only for trusted ones
-  res.header('Access-Control-Allow-Origin', origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
-  
-  // Only allow credentials for trusted domains
-  if (isFirebaseDomain || origin?.includes('localhost') || origin?.includes('.repl.co')) {
+  // For development and allowed origins, enable CORS
+  if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development')) {
+    res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Credentials', 'true');
+  } else if (!origin && process.env.NODE_ENV === 'development') {
+    // For null origins in development
+    res.header('Access-Control-Allow-Origin', '*');
   }
   
-  // Increase max age for better caching of CORS preflight responses
-  res.header('Access-Control-Max-Age', '86400'); // 24 hours
+  // Set allowed methods and headers for all requests
+  res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Expose-Headers', 'Content-Length, Authorization');
   
-  // Handle preflight requests
+  // Pre-approve preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -108,15 +107,15 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       "worker-src 'self' blob:;"
     );
   } else {
-    // Stricter for production, but allow necessary connections
+    // Stricter for production, but allow necessary cross-origin connections
     res.setHeader('Content-Security-Policy', 
       "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.firebaseio.com https://*.firebase.com https://*.googleapis.com; " + 
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + 
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "img-src 'self' data: blob: https://*.googleusercontent.com; " +
       "font-src 'self' https://fonts.gstatic.com; " +
       "object-src 'none'; " +
-      "connect-src 'self' https://*.replit.app https://*.repl.co https://*.web.app https://*.firebaseapp.com https://firebase.googleapis.com https://*.firebaseio.com https://workspace.yash1si22ec119.repl.co https://*.google-analytics.com https://*.googleapis.com https://*.cloudfunctions.net; " +
+      "connect-src 'self' https://notezhubz.web.app https://notezhubz.firebaseapp.com https://notezhub.onrender.com https://*.supabase.co https://*.googleapis.com wss://notezhub.onrender.com *; " +
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
       "form-action 'self'; " +
@@ -278,35 +277,15 @@ app.use((req, res, next) => {
     }
 
     // Start server
-    // Use PORT environment variable if set (common in Replit)
-    // otherwise default to 5000
-    // Also listen on port 5000 for Replit workflow detection
-    const port = process.env.PORT || 5000;
-    const workflowPort = 5000;
-    
-    // Start main server
+    const port = 5000;
     server.listen({
-      port: Number(port),
+      port,
       host: "0.0.0.0",
       reusePort: true,
     }, () => {
       console.log('-----------------------------------');
       log(`NotesHub server running on port ${port}`);
       console.log('-----------------------------------');
-      
-      // If we're not already using port 5000, create a small server on port 5000 
-      // just for Replit workflow detection
-      if (Number(port) !== workflowPort) {
-        // Using Express instance we already imported at the top
-        const workflowApp = express();
-        workflowApp.get('/', (req: Request, res: Response) => {
-          res.send('NotesHub is running on port ' + port);
-        });
-        
-        workflowApp.listen(workflowPort, '0.0.0.0', () => {
-          console.log(`Additional workflow detection server running on port ${workflowPort}`);
-        });
-      }
     });
   } catch (error) {
     console.error('Failed to start application:', error);
