@@ -77,9 +77,13 @@ export const getQueryFn: <T>(options: {
       ? { 'Authorization': `Bearer ${token}` }
       : {};
         
+    // In production, use omit credentials mode to avoid CORS issue with credentials
+    // In development, keep include mode for local testing
+    const credentialsMode = import.meta.env.PROD ? 'omit' : 'include';
+    
     // Use the secure fetch implementation with certificate pinning
     const res = await apiFetch(fullUrl, {
-      credentials: "include",
+      credentials: credentialsMode,
       headers
     });
 
@@ -127,10 +131,13 @@ export const queryClient = new QueryClient({
  */
 export const authenticateWithGoogle = async (email: string, idToken: string) => {
   try {
+    // For Google auth, we need to explicitly set credentials mode
+    const credentialsMode = import.meta.env.PROD ? 'omit' : 'include';
+    
     const response = await apiRequest('POST', '/api/auth/google', {
       idToken,
       email
-    });
+    }, { credentials: credentialsMode });
     
     // Safely parse JSON response
     try {
