@@ -19,36 +19,38 @@ const app = express();
 // Fix trust proxy for rate limiter error
 app.set('trust proxy', 1);
 
-// Set up more permissive CORS for production and development
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl requests)
-    if (!origin) return callback(null, true);
-    
-    const allowedOrigins = [
-      'https://notezhubz.web.app',
-      'https://notezhubz.firebaseapp.com',
-      'https://notezhub.onrender.com',
-      'http://localhost:3000',
-      'http://localhost:5000',
-      'http://localhost:5173'
-    ];
-    
-    // When using credentials, we must specify exact origins
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('replit.dev')) {
-      return callback(null, true); // Return the actual origin instead of '*'
-    } else {
-      console.log(`CORS request from non-allowed origin: ${origin}`);
-      // Only allow listed origins when credentials are used
-      return callback(new Error('Not allowed by CORS'), false);
-    }
-  },
-  credentials: true, // This is important for cookies, sessions, etc.
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Cache-Control'],
-  exposedHeaders: ['Content-Length', 'Authorization'],
-  maxAge: 86400 // Cache preflight requests for 24 hours
-}));
+// Set up explicit CORS for production
+const allowedOrigins = [
+  'https://notezhubz.web.app',
+  'https://notezhubz.firebaseapp.com',
+  'https://notezhub.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://localhost:5173'
+];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Only allow specific origins - no wildcards
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  
+  // Set other CORS headers
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Authorization');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  
+  next();
+});
 
 
 app.use(express.json());
@@ -111,7 +113,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       "img-src 'self' data: blob:; " +
       "font-src 'self'; " +
       "object-src 'none'; " +
-      "connect-src 'self' *.replit.dev; " +
+      "connect-src 'self'; " +
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
       "form-action 'self'; " +
