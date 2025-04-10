@@ -36,7 +36,7 @@ app.use(cors({
     
     // When using credentials, we must specify exact origins
     if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('replit.dev')) {
-      return callback(null, origin); // Return the actual origin instead of '*'
+      return callback(null, true); // Return the actual origin instead of '*'
     } else {
       console.log(`CORS request from non-allowed origin: ${origin}`);
       // Only allow listed origins when credentials are used
