@@ -7,26 +7,14 @@ import {
 import { loginUserSchema, registerUserSchema, type User } from "@shared/schema";
 import { apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { setAuthToken, clearAuthToken } from "../lib/api";
 import { z } from "zod";
-import { 
-  getApiUrl, 
-  storeAuthTokens, 
-  clearAuthTokens, 
-  getRefreshToken, 
-  getAccessToken 
-} from "../lib/auth-utils";
 
 interface LoginResponse {
   user: Omit<User, "password">;
-  accessToken?: string;
-  refreshToken?: string;
+  accessToken: string;
+  refreshToken: string;
   twoFactorRequired?: boolean;
-}
-
-interface RegisterResponse {
-  user: Omit<User, "password">;
-  accessToken?: string;
-  refreshToken?: string;
 }
 
 type AuthContextType = {
@@ -35,8 +23,7 @@ type AuthContextType = {
   error: Error | null;
   loginMutation: UseMutationResult<LoginResponse, Error, z.infer<typeof loginUserSchema>>;
   logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<RegisterResponse, Error, z.infer<typeof registerUserSchema>>;
-  refreshToken: () => Promise<string | null>;
+  registerMutation: UseMutationResult<Omit<User, "password">, Error, z.infer<typeof registerUserSchema>>;
 };
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -62,74 +49,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  // Function to refresh the access token
-  const refreshTokenFn = async (): Promise<string | null> => {
-    const storedRefreshToken = getRefreshToken();
-    
-    if (!storedRefreshToken) {
-      return null;
-    }
-    
-    try {
-      const response = await fetch(getApiUrl('/api/auth/refresh-token'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ refreshToken: storedRefreshToken }),
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        // If refresh fails, clear stored tokens
-        clearAuthTokens();
-        return null;
-      }
-      
-      const data = await response.json();
-      
-      // Store the new tokens
-      storeAuthTokens(data.accessToken, data.refreshToken);
-      
-      return data.accessToken;
-    } catch (error) {
-      console.error('Failed to refresh token:', error);
-      clearAuthTokens();
-      return null;
-    }
-  };
-
   const loginMutation = useMutation({
     mutationFn: async (credentials: z.infer<typeof loginUserSchema>) => {
-      const response = await fetch(getApiUrl('/api/login'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Login failed');
-      }
-      
-      return await response.json();
+      const res = await apiRequest("POST", "/api/login", credentials);
+      return await res.json();
     },
     onSuccess: (data: LoginResponse) => {
-      // Store user data in the query cache
-      if (data.user) {
-        queryClient.setQueryData(["/api/user"], data.user);
+      // Store auth tokens for future API requests
+      if (data.accessToken) {
+        setAuthToken(data.accessToken);
         
-        // Store tokens if provided
-        if (data.accessToken && data.refreshToken) {
-          storeAuthTokens(data.accessToken, data.refreshToken);
-        }
+        // Store user data in React Query cache
+        queryClient.setQueryData(["/api/user"], data.user);
         
         toast({
           title: "Login successful",
           description: `Welcome back, ${data.user.usn}!`,
         });
       } else if (data.twoFactorRequired) {
+        // Handle 2FA if implemented
         toast({
           title: "Two-factor authentication required",
           description: "Please enter your 2FA code",
@@ -147,31 +85,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (credentials: z.infer<typeof registerUserSchema>) => {
-      const response = await fetch(getApiUrl('/api/register'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-        credentials: 'include'
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Registration failed');
-      }
-      
-      return await response.json();
+      const res = await apiRequest("POST", "/api/register", credentials);
+      return await res.json();
     },
-    onSuccess: (data: RegisterResponse) => {
-      queryClient.setQueryData(["/api/user"], data.user);
-      
-      // Store tokens if provided
-      if (data.accessToken && data.refreshToken) {
-        storeAuthTokens(data.accessToken, data.refreshToken);
-      }
-      
+    onSuccess: (user: Omit<User, "password">) => {
+      queryClient.setQueryData(["/api/user"], user);
       toast({
         title: "Registration successful",
-        description: `Welcome to NotesHub, ${data.user.usn}!`,
+        description: `Welcome to NotesHub, ${user.usn}!`,
       });
     },
     onError: (error: Error) => {
@@ -185,44 +106,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      // Try to revoke refresh token if it exists
-      const refreshToken = getRefreshToken();
-      if (refreshToken) {
-        try {
-          await fetch(getApiUrl('/api/auth/revoke-token'), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${getAccessToken()}`
-            },
-            credentials: 'include'
-          });
-        } catch (error) {
-          console.error('Error revoking token:', error);
-        }
+      try {
+        await apiRequest("POST", "/api/logout");
+      } catch (error) {
+        console.log("Logout API request failed, but we'll clear local tokens anyway");
+        // Continue with local logout even if server request fails
       }
-      
-      // Also do session-based logout
-      await fetch(getApiUrl('/api/logout'), {
-        method: 'POST',
-        credentials: 'include'
-      });
-      
-      // Remove tokens from local storage
-      clearAuthTokens();
     },
     onSuccess: () => {
+      // Clear auth token from localStorage and memory
+      clearAuthToken();
+      
+      // Clear user data from cache
       queryClient.setQueryData(["/api/user"], null);
+      
       toast({
         title: "Logged out",
         description: "You have been logged out successfully.",
       });
     },
     onError: (error: Error) => {
+      // Even if there's an error, still clear local tokens
+      clearAuthToken();
+      queryClient.setQueryData(["/api/user"], null);
+      
       toast({
-        title: "Logout failed",
-        description: error.message,
-        variant: "destructive",
+        title: "Logout notice",
+        description: "You have been logged out locally. Server sync may have failed.",
       });
     },
   });
@@ -236,7 +146,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginMutation,
         logoutMutation,
         registerMutation,
-        refreshToken: refreshTokenFn
       }}
     >
       {children}
