@@ -1,5 +1,6 @@
 import { School, BookOpen, Mail } from "lucide-react";
 import { Link } from "wouter";
+import { DatabaseStatus } from "../DatabaseStatus.tsx";
 
 export default function Footer() {
   return (
@@ -60,8 +61,14 @@ export default function Footer() {
           </div>
         </div>
         
-        <div className="pt-4 border-t border-gray-700 text-center text-sm text-gray-400">
-          &copy; {new Date().getFullYear()} NotesHub. All rights reserved.
+        <div className="pt-4 border-t border-gray-700 flex flex-col md:flex-row justify-between items-center text-sm text-gray-400">
+          <div>
+            &copy; {new Date().getFullYear()} NotesHub. All rights reserved.
+          </div>
+          <div className="mt-2 md:mt-0 flex items-center space-x-2">
+            <span className="text-xs text-gray-500">System Status:</span>
+            <DatabaseStatus />
+          </div>
         </div>
       </div>
     </footer>
