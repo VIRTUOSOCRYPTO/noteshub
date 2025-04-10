@@ -12,20 +12,18 @@ const PINNED_CERTIFICATE_HASHES: Record<string, string[]> = {
   // Format: domain: [hash1, hash2, ...]
   // Using placeholder values for demonstration
   // In production, use actual certificate public key hashes
-  
-  // Replit domains - allow any *.repl.co domain 
-  'repl.co': [
-    'sha256/REPLIT_DOMAIN_NO_VALIDATION',
+  'notezhub.onrender.com': [
+    'sha256/DEVELOPMENT_MODE_NO_VALIDATION',
+    // Include multiple hashes for cert rotation
   ],
-  
-  // Firebase hosting domains
-  'web.app': [
-    'sha256/FIREBASE_DOMAIN_NO_VALIDATION',
+  'notezhubz.web.app': [
+    'sha256/DEVELOPMENT_MODE_NO_VALIDATION',
+    // Include multiple hashes for cert rotation
   ],
-  'firebaseapp.com': [
-    'sha256/FIREBASE_DOMAIN_NO_VALIDATION',
+  'notezhubz.firebaseapp.com': [
+    'sha256/DEVELOPMENT_MODE_NO_VALIDATION',
+    // Include multiple hashes for cert rotation
   ],
-  
   // Default hash for development environments
   'localhost': [
     'sha256/DEVELOPMENT_MODE_NO_VALIDATION'
