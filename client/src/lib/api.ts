@@ -102,13 +102,12 @@ export const apiRequest = async <T = any>(
     headers = { ...headers, ...options.headers };
   }
 
-  // In production, use 'same-origin' credentials mode to avoid CORS issues
-  // In development, keep 'include' mode for local testing with cookies
-  const credentialsMode = import.meta.env.PROD ? 'same-origin' : 'include';
-  
+  // Always use 'include' credentials mode for cross-origin API requests
+  // This ensures cookies/auth will be sent when frontend and API are on different domains
+  // Critical for cross-origin communication between Firebase hosting and Render
   const defaultOptions: RequestInit = {
     headers,
-    credentials: credentialsMode, 
+    credentials: 'include', 
   };
 
   const fetchOptions = { ...defaultOptions, ...options };
