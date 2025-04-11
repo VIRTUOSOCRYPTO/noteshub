@@ -19,41 +19,48 @@ const app = express();
 // Fix trust proxy for rate limiter error
 app.set('trust proxy', 1);
 
-// Set up explicit CORS for production and development
+// Set up explicit CORS with allowed origins for production and development
 const allowedOrigins = [
   'https://notezhubz.web.app',
   'https://notezhubz.firebaseapp.com',
   'https://notezhub.onrender.com',
   'http://localhost:3000',
   'http://localhost:5000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  // Add any additional origins you need here
 ];
 
-// Use the cors package for consistent handling across environments
-app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, etc)
-    if (!origin) return callback(null, true);
+// Custom middleware for CORS to ensure proper headers for credentials
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Set cors headers for preflight requests
+  // Preflight requests send an OPTIONS request first
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+    res.header('Access-Control-Max-Age', '86400'); // 24 hours
     
-    // Check if the origin is in our allowed list
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, origin); // Return the origin to allow it
+    // Check if the request origin is allowed
+    if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development')) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
     }
     
-    // In development, be more permissive
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`Development mode: allowing origin: ${origin}`);
-      return callback(null, origin);
+    return res.status(204).end();
+  }
+  
+  // Handle normal requests
+  if (origin) {
+    // For allowed origins or in development, set proper CORS headers
+    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
     }
-    
-    // In production, only allow specified origins
-    console.warn(`Request from non-allowed origin: ${origin}`);
-    callback(null, false); // Block the request
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Cache-Control']
-}));
+  }
+  
+  next();
+});
 
 
 app.use(express.json());
@@ -63,13 +70,15 @@ app.get('/test', (req, res) => {
   res.json({ message: 'CORS is working!' });
 });
 
-// Import the storage function to avoid using require
+// Import needed modules
 import { isFallbackStorage } from './storage';
+import { sql, db, isFallbackStorage as dbFallbackCheck } from './db';
 
 // Database health check endpoint
 app.get('/api/db-status', (req, res) => {
   try {
-    const usingFallback = isFallbackStorage();
+    // Check if using fallback storage
+    const usingFallback = isFallbackStorage() || dbFallbackCheck();
     
     if (usingFallback) {
       res.json({
@@ -78,14 +87,29 @@ app.get('/api/db-status', (req, res) => {
         fallback: true
       });
     } else {
-      res.json({
-        status: 'ok',
-        message: 'Database connection is active',
-        fallback: false
-      });
+      // Try to run a test query to verify connection
+      sql`SELECT 1 as test`
+        .then((result: any) => {
+          res.json({
+            status: 'ok',
+            message: 'Database connection is active',
+            fallback: false,
+            test_result: result
+          });
+        })
+        .catch((dbError: any) => {
+          console.error('Database test query failed:', dbError);
+          res.status(500).json({
+            status: 'error',
+            message: 'Database connection test failed',
+            error: dbError.message,
+            code: dbError.code
+          });
+        });
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Error in db-status endpoint:', error);
     res.status(500).json({
       status: 'error',
       message: 'Failed to check database status',
