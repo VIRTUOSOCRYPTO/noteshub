@@ -51,11 +51,25 @@ let authToken: string | null = null;
 export const setAuthToken = (token: string) => {
   authToken = token;
   localStorage.setItem('auth_token', token);
+  document.cookie = `auth_token=${token}; path=/; SameSite=None; Secure`;
 };
 
 export const getAuthToken = (): string | null => {
   if (!authToken) {
     authToken = localStorage.getItem('auth_token');
+    
+    // Also try to get from cookies if not in localStorage
+    if (!authToken) {
+      const cookieValue = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('auth_token='));
+      
+      if (cookieValue) {
+        authToken = cookieValue.split('=')[1];
+        // Sync to localStorage
+        localStorage.setItem('auth_token', authToken);
+      }
+    }
   }
   return authToken;
 };
@@ -63,6 +77,7 @@ export const getAuthToken = (): string | null => {
 export const clearAuthToken = () => {
   authToken = null;
   localStorage.removeItem('auth_token');
+  document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=None; Secure';
 };
 
 // Selected fetch implementation
@@ -90,6 +105,8 @@ export const apiRequest = async <T = any>(
   // Create headers object
   let headers: HeadersInit = {
     'Content-Type': 'application/json',
+    // Add explicit Origin header to prevent CORS issues
+    'Origin': window.location.origin
   };
   
   // Add authorization header if token exists
@@ -108,11 +125,14 @@ export const apiRequest = async <T = any>(
   const defaultOptions: RequestInit = {
     headers,
     credentials: 'include', 
+    // Add mode: 'cors' explicitly to ensure proper CORS handling
+    mode: 'cors'
   };
 
   const fetchOptions = { ...defaultOptions, ...options };
 
   try {
+    console.log(`Making API request to ${url} with credentials mode: ${fetchOptions.credentials}`);
     const response = await apiFetch(url, fetchOptions);
 
     if (!response.ok) {
