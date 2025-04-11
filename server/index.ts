@@ -23,10 +23,6 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
   'https://notezhubz.web.app',
   'https://notezhubz.firebaseapp.com',
-  'https://notezhub.onrender.com',
-  'http://localhost:3000',
-  'http://localhost:5000',
-  'http://localhost:5173',
   // Add any additional origins you need here
 ];
 
