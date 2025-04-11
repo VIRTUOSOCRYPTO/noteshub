@@ -19,45 +19,56 @@ const app = express();
 // Fix trust proxy for rate limiter error
 app.set('trust proxy', 1);
 
-// Set up explicit CORS with allowed origins for production and development
-const allowedOrigins = [
-  'https://notezhubz.web.app',
-  'https://notezhubz.firebaseapp.com',
-  // Add any additional origins you need here
-];
+// Define allowed origins for CORS - either from environment variable or hardcoded defaults
+let allowedOrigins: string[];
+if (process.env.CORS_ALLOW_ORIGIN) {
+  // Use origins from environment variable
+  allowedOrigins = process.env.CORS_ALLOW_ORIGIN.split(',');
+  console.log('Using CORS origins from environment:', allowedOrigins);
+} else {
+  // Use hardcoded defaults
+  allowedOrigins = [
+    'https://notezhubz.web.app',
+    'https://notezhubz.firebaseapp.com',
+    'https://notezhub.onrender.com',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://localhost:5173'
+  ];
+  console.log('Using default CORS origins');
+}
 
-// Custom middleware for CORS to ensure proper headers for credentials
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Set cors headers for preflight requests
-  // Preflight requests send an OPTIONS request first
-  if (req.method === 'OPTIONS') {
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
-    res.header('Access-Control-Max-Age', '86400'); // 24 hours
-    
-    // Check if the request origin is allowed
-    if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development')) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Credentials', 'true');
+// Use credentials from environment variable or default to true
+const useCredentials = process.env.CORS_CREDENTIALS !== 'false'; // default to true unless explicitly set to 'false'
+
+// Configure CORS using the package with explicit origins and credentials
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
     }
     
-    return res.status(204).end();
-  }
-  
-  // Handle normal requests
-  if (origin) {
-    // For allowed origins or in development, set proper CORS headers
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Credentials', 'true');
+    // Check against allowedOrigins
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, origin);
     }
-  }
-  
-  next();
-});
+    
+    // In development, allow any origin for easier testing
+    if (process.env.NODE_ENV === 'development') {
+      return callback(null, origin);
+    }
+    
+    // Otherwise, block the request
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: useCredentials,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cache-Control']
+}));
 
+// Log CORS configuration
+console.log(`CORS configuration: ${allowedOrigins.length} origins, credentials: ${useCredentials}`);
 
 app.use(express.json());
 
