@@ -19,7 +19,7 @@ const app = express();
 // Fix trust proxy for rate limiter error
 app.set('trust proxy', 1);
 
-// Set up explicit CORS for production
+// Set up explicit CORS for production and development
 const allowedOrigins = [
   'https://notezhubz.web.app',
   'https://notezhubz.firebaseapp.com',
@@ -29,28 +29,31 @@ const allowedOrigins = [
   'http://localhost:5173'
 ];
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Only allow specific origins - no wildcards
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  
-  // Set other CORS headers
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Authorization');
-  res.setHeader('Access-Control-Max-Age', '86400');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  
-  next();
-});
+// Use the cors package for consistent handling across environments
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    // Check if the origin is in our allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, origin); // Return the origin to allow it
+    }
+    
+    // In development, be more permissive
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Development mode: allowing origin: ${origin}`);
+      return callback(null, origin);
+    }
+    
+    // In production, only allow specified origins
+    console.warn(`Request from non-allowed origin: ${origin}`);
+    callback(null, false); // Block the request
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'Cache-Control']
+}));
 
 
 app.use(express.json());
@@ -104,8 +107,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   
   // Enhanced Content Security Policy with balanced security and functionality
-  // More relaxed for development
   if (process.env.NODE_ENV === 'development') {
+    // In development mode, we need to be more permissive
     res.setHeader('Content-Security-Policy', 
       "default-src 'self'; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + 
@@ -113,7 +116,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       "img-src 'self' data: blob:; " +
       "font-src 'self'; " +
       "object-src 'none'; " +
-      "connect-src 'self'; " +
+      "connect-src 'self' *; " +  // Allow all connections in dev
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
       "form-action 'self'; " +
@@ -122,7 +125,10 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       "worker-src 'self' blob:;"
     );
   } else {
-    // Enable CSP in production with allowed origins
+    // Production CSP - specifically allow cross-origin between Firebase and Render
+    const frontendDomains = "https://notezhubz.web.app https://notezhubz.firebaseapp.com";
+    const backendDomains = "https://notezhub.onrender.com";
+    
     res.setHeader('Content-Security-Policy', 
       "default-src 'self'; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + 
@@ -130,7 +136,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
       "img-src 'self' data: blob:; " +
       "font-src 'self'; " +
       "object-src 'none'; " +
-      "connect-src 'self' https://notezhubz.web.app https://notezhubz.firebaseapp.com https://notezhub.onrender.com; " +
+      `connect-src 'self' ${frontendDomains} ${backendDomains}; ` +
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
       "form-action 'self'; " +
