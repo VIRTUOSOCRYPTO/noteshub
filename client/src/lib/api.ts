@@ -12,15 +12,22 @@ const getApiBaseUrl = (): string => {
   const envApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
   if (envApiBaseUrl) {
+    console.log('Using API base URL from environment:', envApiBaseUrl);
     return envApiBaseUrl;
   }
 
-  if (import.meta.env.PROD) {
+  // Check if we're running on Firebase hosting
+  const isFirebaseHosting = window.location.hostname.includes('web.app') || 
+                          window.location.hostname.includes('firebaseapp.com');
+
+  if (isFirebaseHosting || import.meta.env.PROD) {
     // For production with Firebase hosting + Render backend
+    console.log('Using production Render backend URL');
     return 'https://notezhub.onrender.com';
   }
 
   // For development, the default is empty string which means same-origin
+  console.log('Using same-origin API URL (development)');
   return '';
 };
 
@@ -35,10 +42,7 @@ const getFetchImplementation = (): typeof fetch => {
 };
 
 // API base URL to be used for all requests
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
-  (import.meta.env.PROD 
-    ? "https://notezhub.onrender.com" 
-    : "");
+export const API_BASE_URL = getApiBaseUrl();
 
 // Log the API base URL for debugging (not in production)
 if (import.meta.env.DEV) {
@@ -132,25 +136,76 @@ export const apiRequest = async <T = any>(
   const fetchOptions = { ...defaultOptions, ...options };
 
   try {
-    console.log(`Making API request to ${url} with credentials mode: ${fetchOptions.credentials}`);
-    const response = await apiFetch(url, fetchOptions);
+    console.log(`Making API request to ${url} with:`, {
+      method: fetchOptions.method || 'GET',
+      credentials: fetchOptions.credentials,
+      mode: fetchOptions.mode,
+      headers: fetchOptions.headers
+    });
+    
+    // Add timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+    
+    let responseData: T;
+    
+    try {
+      const response = await apiFetch(url, {
+        ...fetchOptions,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      // Get key response headers individually to avoid iterator compatibility issues
+      const responseHeaders: Record<string, string> = {
+        'content-type': response.headers.get('content-type') || '',
+        'content-length': response.headers.get('content-length') || '',
+        'access-control-allow-origin': response.headers.get('access-control-allow-origin') || '',
+        'access-control-allow-credentials': response.headers.get('access-control-allow-credentials') || ''
+      };
+      
+      console.log(`Received response from ${url}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders
+      });
 
-    if (!response.ok) {
-      let errorMessage = `Error: ${response.status} ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorData.message || errorMessage;
-      } catch (e) {
-        // Fall back to default message
+      if (!response.ok) {
+        let errorMessage = `Error: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch (e) {
+          // Fall back to default message
+        }
+        throw new Error(errorMessage);
       }
-      throw new Error(errorMessage);
+      
+      // Process successful response
+      if (response.status === 204) {
+        responseData = {} as T;
+      } else {
+        responseData = await response.json() as T;
+      }
+      
+      return responseData;
+      
+    } catch (error: unknown) {
+      clearTimeout(timeoutId);
+      console.error(`Fetch error for ${url}:`, error);
+      
+      // Improved error message for network errors
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          throw new Error(`Request timeout after 15 seconds: ${url}`);
+        } else if (error instanceof TypeError && error.message.includes('NetworkError')) {
+          throw new Error(`Network error - Check if the server is running and accessible: ${url}`);
+        }
+      }
+      
+      throw error;
     }
-
-    if (response.status === 204) {
-      return {} as T;
-    }
-
-    return await response.json() as T;
   } catch (error) {
     console.error(`API request failed: ${endpoint}`, error);
     throw error;
