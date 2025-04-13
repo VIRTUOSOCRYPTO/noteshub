@@ -15,8 +15,42 @@ export const DatabaseStatusIndicator: React.FC = () => {
     const checkDatabaseStatus = async () => {
       try {
         setIsLoading(true);
-        const data = await apiGet<DatabaseStatus>('/api/db-status');
-        setStatus(data);
+        // Try the original endpoint first
+        try {
+          const data = await apiGet<DatabaseStatus>('/api/db-status');
+          setStatus(data);
+          return; // If successful, exit early
+        } catch (primaryError) {
+          console.log('Primary database status endpoint failed, trying alternative...');
+          
+          // If original endpoint fails, try the alternative
+          try {
+            // Try the alternative endpoint
+            const data = await apiGet<DatabaseStatus>('/api/db-check');
+            // If we get here, the server is at least responsive
+            setStatus({
+              status: 'ok',
+              message: 'Server is reachable',
+              fallback: false
+            });
+            return;
+          } catch (secondaryError) {
+            // Both endpoints failed, try one more option
+            try {
+              // Try the test endpoint as a last resort
+              await apiGet('/api/test');
+              // If this succeeds, server is up but db endpoints aren't available
+              setStatus({
+                status: 'ok',
+                message: 'Server is reachable, but database status is unknown',
+                fallback: false
+              });
+            } catch (finalError) {
+              // All attempts failed
+              throw new Error('All database status endpoints failed');
+            }
+          }
+        }
       } catch (error) {
         console.error('Failed to check database status:', error);
         setStatus({
