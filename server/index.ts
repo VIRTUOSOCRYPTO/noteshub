@@ -33,9 +33,6 @@ if (process.env.CORS_ALLOW_ORIGIN) {
     'https://notezhub.onrender.com',
     'https://noteshub-ocpi.onrender.com',
     'https://noteshub-api-gqkp.onrender.com',
-    'http://localhost:3000',
-    'http://localhost:5000',
-    'http://localhost:5173'
   ];
   console.log('Using default CORS origins');
 }
