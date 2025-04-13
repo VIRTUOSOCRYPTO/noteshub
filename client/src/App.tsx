@@ -11,6 +11,7 @@ import ResetPassword from "@/pages/ResetPassword";
 import Profile from "@/pages/Profile";
 import Settings from "@/pages/Settings";
 import FlaggedContent from "@/pages/FlaggedContent";
+import CorsDebug from "@/pages/CorsDebug";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import ToastContainer from "@/components/ui/toast-container";
@@ -31,6 +32,7 @@ function Router() {
       <ProtectedRoute path="/flagged" component={FlaggedContent} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/reset-password" component={ResetPassword} />
+      <Route path="/cors-debug" component={CorsDebug} />
       <Route component={NotFound} />
     </Switch>
   );
