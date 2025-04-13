@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: noteshub-backend
+    name: noteshub-api
     env: node
     plan: free
     buildCommand: chmod +x build-simple.sh && ./build-simple.sh
