@@ -174,8 +174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax',
       httpOnly: true,
-      path: '/',
-      domain: process.env.NODE_ENV === "production" ? '.onrender.com' : undefined
+      path: '/'
     }
   }));
   
@@ -333,8 +332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         path: '/',
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax',
-        domain: process.env.NODE_ENV === "production" ? '.onrender.com' : undefined
+        sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax'
       });
       res.status(200).json({ message: 'Logged out successfully' });
     });
