@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db, sql } from "./db";
-import { notes, drawings } from "../shared/schema";
+import { notes, drawings } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import multer from "multer";
 import { v4 as uuidv4 } from "uuid";
@@ -20,7 +20,7 @@ import {
   resetPasswordSchema,
   googleAuthSchema,
   type User 
-} from "../shared/schema";
+} from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
 import session from "express-session";
@@ -89,30 +89,77 @@ declare module 'express-session' {
   }
 }
 
-// Auth middleware
-const isAuthenticated = (req: Request, res: Response, next: Function) => {
-  // Check session-based authentication first
-  if (req.session && req.session.userId) {
-    return next();
+// Auth middleware that checks for either session or token
+const isAuthenticated = async (req: Request, res: Response, next: Function) => {
+  // First check for JWT token in headers
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7); // Remove "Bearer " prefix
+    try {
+      const decoded = verifyToken(token);
+      if (decoded && decoded.userId) {
+        // Set userId in request for downstream use
+        req.session.userId = decoded.userId;
+        return next();
+      }
+    } catch (error) {
+      console.error('Token verification failed:', error);
+    }
   }
   
-  // Then check JWT token-based authentication
-  const authHeader = req.headers.authorization;
-  const token = extractToken(authHeader);
-  
-  if (token) {
-    const decoded = verifyToken(token);
-    if (decoded && decoded.userId) {
-      // If valid JWT token, set userId to be used in request handlers
-      req.userId = decoded.userId;
-      return next();
-    }
+  // Fall back to session-based auth if token is not present or invalid
+  if (req.session && req.session.userId) {
+    return next();
   }
   
   res.status(401).json({ error: 'Unauthorized' });
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Test Routes for API connectivity troubleshooting
+  app.get('/test', (req, res) => {
+    res.json({ 
+      message: 'CORS is working!',
+      timestamp: new Date().toISOString()
+    });
+  });
+  
+  // Root path - serve basic info to help with deployment debugging
+  app.get('/', (req, res, next) => {
+    // Check if this is an API-only request (no Accept header for HTML)
+    if (!req.headers.accept || !req.headers.accept.includes('text/html')) {
+      return res.json({
+        name: 'NotesHub API',
+        status: 'running',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development',
+        message: 'API server is running. Use /api/health for more detailed status.'
+      });
+    }
+    
+    // For HTML requests, let the frontend handle it
+    next();
+  });
+  
+  // Simple health check endpoint - accessible at both /api/health and /health
+  const healthHandler = (req: Request, res: Response) => {
+    res.json({ 
+      status: 'ok', 
+      message: 'API server is running',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      host: req.get('host'),
+      path: req.path,
+      baseUrl: req.baseUrl,
+      originalUrl: req.originalUrl,
+      headers: req.headers
+    });
+  };
+  
+  // Register the health check at multiple paths for testing
+  app.get('/api/health', healthHandler);
+  app.get('/health', healthHandler);  // Alternative path, useful for testing
+
   // Set up session middleware
   const MemoryStore = memorystore(session);
   app.use(session({
@@ -124,7 +171,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }),
     cookie: {
       secure: process.env.NODE_ENV === "production",
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax',
+      httpOnly: true,
+      path: '/',
+      domain: process.env.NODE_ENV === "production" ? '.onrender.com' : undefined
     }
   }));
   
@@ -141,26 +192,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const usn = req.body.usn.toUpperCase();
         const department = req.body.department;
         
-        // Extract department code using regex pattern - supporting hyphenated and comma formats with any number of departments
-        const standardPattern = /^[0-9][A-Za-z]{2}[0-9]{2}([A-Za-z]{2}(?:[-,][A-Za-z]{2})*)[0-9]{3}$/;
-        const shortPattern = /^[0-9]{2}([A-Za-z]{2}(?:[-,][A-Za-z]{2})*)[0-9]{3}$/;
-        
-        // Try standard format first, then short format
-        let match = usn.match(standardPattern);
-        if (!match) {
-          match = usn.match(shortPattern);
-        }
+        // Extract department code using regex pattern
+        const usnPattern = /^[0-9][A-Za-z]{2}[0-9]{2}([A-Za-z]{2})[0-9]{3}$/;
+        const match = usn.match(usnPattern);
         
         if (match) {
           // The department code is in the first capture group
           const usnDeptCode = match[1];
           
           // Import DEPARTMENT_CODES from schema
-          const { DEPARTMENT_CODES } = await import("../shared/schema");
-          
-          // Debug output for troubleshooting
-          console.log(`USN: ${usn}, Extracted Code: '${usnDeptCode}', Department: ${department}`);
-          console.log(`Department mapping: ${usnDeptCode} → ${DEPARTMENT_CODES[usnDeptCode]}`);
+          const { DEPARTMENT_CODES } = await import("@shared/schema");
           
           // Check if department code maps to expected department
           const expectedDept = DEPARTMENT_CODES[usnDeptCode];
@@ -198,20 +239,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Set session
       req.session.userId = user.id;
       
-      // Generate JWT tokens
-      const accessToken = generateAccessToken(user);
-      const refreshToken = generateRefreshToken(user);
-      
-      // Store the refresh token in the database
-      await storage.storeRefreshToken(user.id, refreshToken);
-      
-      // Return user data and tokens
+      // Return user data (excluding password)
       const { password, ...userWithoutPassword } = user;
-      res.status(201).json({
-        user: userWithoutPassword,
-        accessToken,
-        refreshToken
-      });
+      res.status(201).json(userWithoutPassword);
     } catch (error) {
       if (error instanceof ZodError) {
         const validationError = fromZodError(error);
@@ -298,7 +328,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (err) {
         return res.status(500).json({ error: 'Failed to logout' });
       }
-      res.clearCookie('connect.sid');
+      // Clear the cookie with the same settings as when it was set
+      res.clearCookie('connect.sid', {
+        path: '/',
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax',
+        domain: process.env.NODE_ENV === "production" ? '.onrender.com' : undefined
+      });
       res.status(200).json({ message: 'Logged out successfully' });
     });
   });
@@ -431,29 +468,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/user - Get current user info
   app.get('/api/user', async (req: Request, res: Response) => {
     try {
-      let userId: number | undefined = undefined;
-      
-      // Check for session-based authentication first
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } 
-      // Then check for JWT token-based authentication
-      else {
-        const authHeader = req.headers.authorization;
-        const token = extractToken(authHeader);
-        
-        if (token) {
-          const decoded = verifyToken(token);
-          if (decoded && decoded.userId) {
-            userId = decoded.userId;
-          }
-        }
-      }
-      
-      if (!userId) {
+      if (!req.session.userId) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
+      const userId = req.session.userId;
       const user = await storage.getUser(userId);
       
       if (!user) {
@@ -464,7 +483,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { password, ...userWithoutPassword } = user;
       res.json(userWithoutPassword);
     } catch (error) {
-      console.error('Error fetching user data:', error);
       res.status(500).json({ error: 'Failed to get user data' });
     }
   });
@@ -476,28 +494,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let userDepartment: string | undefined;
       let userCollege: string | undefined;
       let userYear: number | undefined;
-      let userId: number | undefined;
       
-      // Check for session-based authentication first
       if (req.session.userId) {
-        userId = req.session.userId;
-      } 
-      // Then check for JWT token-based authentication
-      else {
-        const authHeader = req.headers.authorization;
-        const token = extractToken(authHeader);
-        
-        if (token) {
-          const decoded = verifyToken(token);
-          if (decoded && decoded.userId) {
-            userId = decoded.userId;
-          }
-        }
-      }
-      
-      // If authentication found, get user details
-      if (userId) {
-        const user = await storage.getUser(userId);
+        const user = await storage.getUser(req.session.userId);
         userDepartment = user?.department;
         userCollege = user?.college || undefined;
         userYear = user?.year;
@@ -561,18 +560,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      // Get user information from either session or JWT
-      // We already checked in isAuthenticated that userId exists in either req.session.userId or req.userId
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
-        return res.status(401).json({ error: 'Not authenticated' });
-      }
-      
+      // Get user information
+      // We already checked in isAuthenticated that userId exists
+      // Force type assertion with non-null assertion operator
+      const userId = req.session.userId!;
       const user = await storage.getUser(userId);
       
       if (!user) {
@@ -679,28 +670,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Note not found' });
       }
       
-      // Get authenticated user ID from session or JWT
-      let userId: number | undefined = undefined;
-      
-      // Check for session-based authentication first
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } 
-      // Then check for JWT token-based authentication
-      else {
-        const authHeader = req.headers.authorization;
-        const token = extractToken(authHeader);
-        
-        if (token) {
-          const decoded = verifyToken(token);
-          if (decoded && decoded.userId) {
-            userId = decoded.userId;
-          }
-        }
-      }
-      
       // Require login to download notes and check year restrictions
-      if (!userId) {
+      if (!req.session.userId) {
         // Log security event for unauthorized download attempt
         const { logSecurityEvent, SecurityEventType, LogSeverity } = await import('./security-logger');
         logSecurityEvent(
@@ -713,7 +684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if the user's academic year matches the note's year
-      const user = await storage.getUser(userId);
+      const user = await storage.getUser(req.session.userId);
       if (!user) {
         return res.status(401).json({ error: 'User not found' });
       }
@@ -843,14 +814,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PATCH /api/user/settings - Update user settings
   app.patch('/api/user/settings', isAuthenticated, async (req: Request, res: Response) => {
     try {
-      // Get user ID from either session or JWT token
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
+      if (!req.session.userId) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
@@ -858,7 +822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const settingsData = updateUserSettingsSchema.parse(req.body);
       
       // Update user settings
-      const updatedUser = await storage.updateUserSettings(userId, settingsData);
+      const updatedUser = await storage.updateUserSettings(req.session.userId, settingsData);
       
       // Return user data (excluding password)
       const { password, ...userWithoutPassword } = updatedUser;
@@ -878,14 +842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PATCH /api/user/password - Update user password
   app.patch('/api/user/password', isAuthenticated, async (req: Request, res: Response) => {
     try {
-      // Get user ID from either session or JWT token
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
+      if (!req.session.userId) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
@@ -894,7 +851,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Update password
       await storage.updatePassword(
-        userId,
+        req.session.userId,
         passwordData.currentPassword,
         passwordData.newPassword
       );
@@ -919,20 +876,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'No file uploaded' });
       }
       
-      // Get user ID from either session or JWT token
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
+      if (!req.session.userId) {
         return res.status(401).json({ error: 'Not authenticated' });
       }
       
       // Update user profile picture in database
       const updatedUser = await storage.updateProfilePicture(
-        userId,
+        req.session.userId,
         req.file.filename
       );
       
@@ -1027,17 +977,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: 'Note not found' });
       }
       
-      // Get user ID from either session or JWT token
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
-        return res.status(401).json({ error: 'Not authenticated' });
-      }
-      
+      // Get user information
+      const userId = req.session.userId!;
       const user = await storage.getUser(userId);
       
       if (!user) {
@@ -1073,17 +1014,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // GET /api/notes/flagged - Get all flagged notes (available to any authenticated user)
   app.get('/api/notes/flagged', isAuthenticated, async (req: Request, res: Response) => {
     try {
-      // Get user ID from either session or JWT token
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
-        return res.status(401).json({ error: 'Not authenticated' });
-      }
-      
+      const userId = req.session.userId!;
       const user = await storage.getUser(userId);
       
       // Any authenticated user can access moderation features
@@ -1118,17 +1049,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: 'Please specify whether the note is approved (true) or rejected (false)' });
       }
       
-      // Get user ID from either session or JWT token
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
-        return res.status(401).json({ error: 'Not authenticated' });
-      }
-      
+      const userId = req.session.userId!;
       const user = await storage.getUser(userId);
       
       // Any authenticated user can review flagged content
@@ -1175,16 +1096,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user stats for achievements
   app.get('/api/user/stats', isAuthenticated, async (req: Request, res: Response) => {
     try {
-      // Get user ID from either session or JWT token
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
-        return res.status(401).json({ error: 'Not authenticated' });
-      }
+      const userId = req.session.userId as number;
       
       // Get user info
       const user = await storage.getUser(userId);
@@ -1248,17 +1160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // This is an admin-only route protected by authentication
   app.get('/api/admin/security-report', isAuthenticated, async (req: Request, res: Response) => {
     try {
-      // Get user ID from either session or JWT token
-      let userId: number;
-      
-      if (req.session.userId) {
-        userId = req.session.userId;
-      } else if (req.userId) {
-        userId = req.userId;
-      } else {
-        return res.status(401).json({ error: 'Not authenticated' });
-      }
-      
+      const userId = req.session.userId!;
       const user = await storage.getUser(userId);
       
       // Only users with USN starting with 'admin' can access this report
