@@ -51,27 +51,41 @@ app.use(cors({
       return callback(null, true);
     }
     
-    // Check against allowedOrigins
+    // IMPORTANT: NEVER use wildcard with credentials
+    // If it's a request from any origin, always return the specific origin
+    // This is critical for CORS to work with credentials
+    
+    // Check against allowedOrigins first
     if (allowedOrigins.includes(origin)) {
+      console.log(`CORS: Allowing whitelisted origin: ${origin}`);
       return callback(null, origin);
     }
     
     // In development, allow any origin for easier testing
     if (process.env.NODE_ENV === 'development') {
+      console.log(`CORS: Allowing development origin: ${origin}`);
       return callback(null, origin);
     }
     
-    // In production, be more permissive to avoid blocking legitimate requests
-    // This prevents issues when deployed to Firebase, Render, etc.
+    // In production, be lenient to avoid blocking legitimate requests
     if (process.env.NODE_ENV === 'production') {
-      console.log(`CORS request from origin: ${origin}`);
+      console.log(`CORS: Allowing production request from: ${origin}`);
+      return callback(null, origin);
+    }
+    
+    // Explicitly check Firebase and Render origins
+    if (origin.includes('web.app') || 
+        origin.includes('firebaseapp.com') || 
+        origin.includes('onrender.com')) {
+      console.log(`CORS: Allowing hosting platform origin: ${origin}`);
       return callback(null, origin);
     }
     
     // Otherwise, block the request
+    console.log(`CORS: Blocked origin: ${origin}`);
     callback(new Error('Not allowed by CORS'));
   },
-  credentials: useCredentials,
+  credentials: true, // Always use credentials: true
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cache-Control']
 }));
@@ -81,9 +95,18 @@ console.log(`CORS configuration: ${allowedOrigins.length} origins, credentials: 
 
 app.use(express.json());
 
-// Sample Route
+// Sample Routes - add variants of test and status endpoints
 app.get('/test', (req, res) => {
   res.json({ message: 'CORS is working!' });
+});
+
+// Add test endpoint at /api/test to match the path pattern of other endpoints
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    message: 'API Test endpoint is working!',
+    cors: 'If you can see this, CORS is configured correctly',
+    credentials: 'enabled'
+  });
 });
 
 // Import needed modules
@@ -116,11 +139,39 @@ app.get('/api/db-status', (req, res) => {
   }
 });
 
-// Additional database status endpoint (simpler version for compatibility)
+// Add multiple variants of database status endpoints for maximum compatibility
+// These are backup endpoints in case the main one doesn't work on Render
 app.get('/api/db-check', (req, res) => {
   res.json({
     status: 'ok',
     message: 'Database status check endpoint'
+  });
+});
+
+// Alternative paths for db status
+app.get('/api/dbstatus', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Alternative database status endpoint',
+    db: process.env.DATABASE_URL ? 'configured' : 'not configured'
+  });
+});
+
+app.get('/api/status', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'API status endpoint',
+    database: process.env.DATABASE_URL ? 'configured' : 'not configured',
+    time: new Date().toISOString()
+  });
+});
+
+// Similar to /api/test, just returning simple status
+app.get('/api/ping', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'API is responding',
+    time: new Date().toISOString()
   });
 });
 
@@ -207,31 +258,31 @@ const apiLimiter = rateLimit.default({
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // If the origin is allowed, set the ACAO header to the specific origin
-  // This is important because with credentials, wildcard origins aren't allowed
+  // Debug log to trace CORS issues
+  console.log(`CORS middleware: Processing request from origin: ${origin || 'no origin'}`);
+  
+  // If the origin is present, set CORS headers (NEVER use * with credentials)
   if (origin) {
-    // In development, allow any origin
-    if (process.env.NODE_ENV === 'development') {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-    } 
-    // In production, check against allowed origins or be more lenient
-    else if (process.env.NODE_ENV === 'production') {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-    }
-    // Check explicitly for Firebase hosting origins
-    else if (origin.includes('notezhubz.web.app') || origin.includes('firebaseapp.com')) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-    }
+    // In ALL cases, explicitly set the origin to the request's origin
+    // This is critical for CORS to work with credentials
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    console.log(`CORS middleware: Set Access-Control-Allow-Origin to ${origin}`);
     
-    // Add additional CORS headers for preflight requests
+    // ALWAYS set credentials to true
     res.setHeader('Access-Control-Allow-Credentials', 'true');
+    console.log(`CORS middleware: Set Access-Control-Allow-Credentials to true`);
+    
+    // Always set allowed methods and headers
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
     
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
+      console.log(`CORS middleware: Responding to preflight request`);
       return res.status(204).send();
     }
+  } else {
+    console.log(`CORS middleware: No origin in request headers, skipping CORS headers`);
   }
   
   next();
