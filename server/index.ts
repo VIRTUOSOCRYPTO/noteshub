@@ -21,9 +21,12 @@ app.set('trust proxy', 1);
 
 // Define allowed origins for CORS - either from environment variable or hardcoded defaults
 let allowedOrigins: string[];
-if (process.env.CORS_ALLOW_ORIGIN) {
+// Check multiple environment variable formats for flexibility
+if (process.env.CORS_ALLOWED_ORIGINS || process.env.CORS_ALLOW_ORIGIN) {
+  // Get from either variable format
+  const originsEnvVar = process.env.CORS_ALLOWED_ORIGINS || process.env.CORS_ALLOW_ORIGIN;
   // Use origins from environment variable
-  allowedOrigins = process.env.CORS_ALLOW_ORIGIN.split(',');
+  allowedOrigins = originsEnvVar!.split(',').map(origin => origin.trim());
   console.log('Using CORS origins from environment:', allowedOrigins);
 } else {
   // Use hardcoded defaults
@@ -35,13 +38,16 @@ if (process.env.CORS_ALLOW_ORIGIN) {
     'https://noteshub-api-gqkp.onrender.com',
     'http://localhost:3000',
     'http://localhost:5000',
-    'http://localhost:5173'
+    'http://localhost:5173',
+    'http://127.0.0.1:5173'
   ];
   console.log('Using default CORS origins');
 }
 
 // Use credentials from environment variable or default to true
-const useCredentials = process.env.CORS_CREDENTIALS !== 'false'; // default to true unless explicitly set to 'false'
+// Check multiple variable formats for flexibility
+const useCredentials = process.env.CORS_ALLOW_CREDENTIALS !== 'false' && 
+                       process.env.CORS_CREDENTIALS !== 'false'; // default to true unless explicitly set to 'false'
 
 // Configure CORS using the package with explicit origins and credentials
 app.use(cors({
@@ -175,6 +181,48 @@ app.get('/api/ping', (req, res) => {
   });
 });
 
+// Special endpoint for testing CORS with credentials
+// This endpoint will echo back all request headers and origin information
+app.get('/api/cors-test', (req, res) => {
+  // Get origin from request
+  const origin = req.headers.origin || 'no origin';
+  
+  // Get important headers for debugging
+  const headers = {
+    host: req.headers.host,
+    origin: req.headers.origin,
+    referer: req.headers.referer,
+    'user-agent': req.headers['user-agent'],
+    'content-type': req.headers['content-type'],
+    'access-control-request-method': req.headers['access-control-request-method'],
+    'access-control-request-headers': req.headers['access-control-request-headers'],
+  };
+  
+  // Get response headers that were set
+  const responseHeaders = {
+    'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
+    'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials'),
+    'access-control-allow-methods': res.getHeader('Access-Control-Allow-Methods'),
+    'access-control-allow-headers': res.getHeader('Access-Control-Allow-Headers'),
+  };
+  
+  // Get cookies (sanitized for security)
+  const hasCookies = req.headers.cookie ? true : false;
+  
+  // Echo back information
+  res.json({
+    message: 'CORS test endpoint',
+    cors: {
+      origin: origin,
+      receivedHeaders: headers,
+      responseHeaders: responseHeaders,
+      hasCookies: hasCookies
+    },
+    environment: process.env.NODE_ENV,
+    timestamp: new Date().toISOString()
+  });
+});
+
 
 // Apply security logger middleware
 app.use(securityLogger);
@@ -254,35 +302,52 @@ const apiLimiter = rateLimit.default({
   }
 });
 
-// Custom CORS headers middleware for better compatibility
+// Enhanced CORS middleware for maximum compatibility across different browsers and environments
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
   // Debug log to trace CORS issues
-  console.log(`CORS middleware: Processing request from origin: ${origin || 'no origin'}`);
+  console.log(`CORS middleware: Processing request from origin: ${origin || 'no origin'}, path: ${req.path}`);
   
-  // If the origin is present, set CORS headers (NEVER use * with credentials)
+  // ALWAYS set CORS headers for all requests (not just those with origin)
+  // This helps in some environments where the origin might be stripped
+  
+  // If there's a specific origin, use it; otherwise use a permissive default for non-credential requests
   if (origin) {
-    // In ALL cases, explicitly set the origin to the request's origin
+    // For requests with origin header, explicitly set the origin
     // This is critical for CORS to work with credentials
     res.setHeader('Access-Control-Allow-Origin', origin);
     console.log(`CORS middleware: Set Access-Control-Allow-Origin to ${origin}`);
-    
-    // ALWAYS set credentials to true
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    console.log(`CORS middleware: Set Access-Control-Allow-Credentials to true`);
-    
-    // Always set allowed methods and headers
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
-    
-    // Handle preflight requests
-    if (req.method === 'OPTIONS') {
-      console.log(`CORS middleware: Responding to preflight request`);
-      return res.status(204).send();
-    }
   } else {
-    console.log(`CORS middleware: No origin in request headers, skipping CORS headers`);
+    // For requests without origin, we still set a default
+    // This is for non-credential cases
+    if (process.env.NODE_ENV === 'development') {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      console.log(`CORS middleware: Set Access-Control-Allow-Origin to * (development mode)`);
+    }
+  }
+  
+  // ALWAYS set credentials to true for all requests
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  console.log(`CORS middleware: Set Access-Control-Allow-Credentials to true`);
+  
+  // Set Vary header to instruct cache logic correctly
+  res.setHeader('Vary', 'Origin');
+  
+  // More comprehensive list of allowed headers
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+  res.setHeader('Access-Control-Allow-Headers', 
+    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Auth-Token, X-CSRF-Token, ' +
+    'Cache-Control, X-Requested-With, If-None-Match, X-Client-Version, X-Api-Key, Pragma'
+  );
+  
+  // Allow browsers to cache CORS result longer (1 hour)
+  res.setHeader('Access-Control-Max-Age', '3600');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    console.log(`CORS middleware: Responding to preflight request from ${origin || 'unknown origin'}`);
+    return res.status(204).end();
   }
   
   next();
