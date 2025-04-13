@@ -123,14 +123,20 @@ export const apiRequest = async <T = any>(
     headers = { ...headers, ...options.headers };
   }
 
-  // Always use 'include' credentials mode for cross-origin API requests
-  // This ensures cookies/auth will be sent when frontend and API are on different domains
+  // Enhanced cross-origin API request configuration
   // Critical for cross-origin communication between Firebase hosting and Render
+  
+  // Determine if we need 'include' credentials based on whether the request is cross-origin
+  const isCrossOrigin = API_BASE_URL !== '' && !API_BASE_URL.startsWith(window.location.origin);
+  console.log(`Request type: ${isCrossOrigin ? 'cross-origin' : 'same-origin'}`);
+  
+  // Always set credentials to include for all requests
+  // This ensures cookies/auth will be sent properly, even for cross-origin requests
   const defaultOptions: RequestInit = {
     headers,
-    credentials: 'include', 
-    // Add mode: 'cors' explicitly to ensure proper CORS handling
-    mode: 'cors'
+    credentials: 'include',
+    // Only set mode:'cors' for cross-origin requests to avoid unnecessary preflight in same-origin
+    mode: isCrossOrigin ? 'cors' : 'same-origin'
   };
 
   const fetchOptions = { ...defaultOptions, ...options };
