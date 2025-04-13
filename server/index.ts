@@ -59,6 +59,13 @@ app.use(cors({
       return callback(null, origin);
     }
     
+    // In production, be more permissive to avoid blocking legitimate requests
+    // This prevents issues when deployed to Firebase, Render, etc.
+    if (process.env.NODE_ENV === 'production') {
+      console.log(`CORS request from origin: ${origin}`);
+      return callback(null, origin);
+    }
+    
     // Otherwise, block the request
     callback(new Error('Not allowed by CORS'));
   },
@@ -202,6 +209,40 @@ const apiLimiter = rateLimit.default({
       error: options.message
     });
   }
+});
+
+// Custom CORS headers middleware for better compatibility
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // If the origin is allowed, set the ACAO header to the specific origin
+  // This is important because with credentials, wildcard origins aren't allowed
+  if (origin) {
+    // In development, allow any origin
+    if (process.env.NODE_ENV === 'development') {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } 
+    // In production, check against allowed origins or be more lenient
+    else if (process.env.NODE_ENV === 'production') {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    // Check explicitly for Firebase hosting origins
+    else if (origin.includes('notezhubz.web.app') || origin.includes('firebaseapp.com')) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    
+    // Add additional CORS headers for preflight requests
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      return res.status(204).send();
+    }
+  }
+  
+  next();
 });
 
 // Apply rate limiting to API routes
