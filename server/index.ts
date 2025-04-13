@@ -31,6 +31,7 @@ if (process.env.CORS_ALLOW_ORIGIN) {
     'https://notezhubz.web.app',
     'https://notezhubz.firebaseapp.com',
     'https://notezhub.onrender.com',
+    'https://noteshub-ocpi.onrender.com', // Added your new frontend domain
     'http://localhost:3000',
     'http://localhost:5000',
     'http://localhost:5173'
@@ -164,7 +165,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     );
   } else {
     // Production CSP - specifically allow cross-origin between Firebase and Render
-    const frontendDomains = "https://notezhubz.web.app https://notezhubz.firebaseapp.com";
+    const frontendDomains = "https://notezhubz.web.app https://notezhubz.firebaseapp.com https://noteshub-ocpi.onrender.com";
     const backendDomains = "https://notezhub.onrender.com";
     
     res.setHeader('Content-Security-Policy', 
@@ -332,7 +333,40 @@ app.use((req, res, next) => {
   try {
     console.log('Registering API routes...');
     const server = await registerRoutes(app);
-    console.log('API routes registered successfully');
+    
+    // Log all registered routes for debugging
+    console.log('API routes registered successfully. Available routes:');
+    
+    // Get all registered routes
+    const registeredRoutes: any[] = [];
+    
+    app._router.stack.forEach((middleware: any) => {
+      if (middleware.route) {
+        // Routes registered directly on the app
+        registeredRoutes.push({
+          path: middleware.route.path,
+          methods: Object.keys(middleware.route.methods).join(', ')
+        });
+      } else if (middleware.name === 'router') {
+        // Router middleware
+        middleware.handle.stack.forEach((handler: any) => {
+          if (handler.route) {
+            registeredRoutes.push({
+              path: handler.route.path,
+              methods: Object.keys(handler.route.methods).join(', ')
+            });
+          }
+        });
+      }
+    });
+    
+    // Print routes in alphabetical order for easier reading
+    registeredRoutes.sort((a, b) => a.path.localeCompare(b.path))
+      .forEach(route => {
+        console.log(`Route: ${route.path} [${route.methods}]`);
+      });
+    
+    console.log(`Total routes registered: ${registeredRoutes.length}`);
 
     // Global error handler
     app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
