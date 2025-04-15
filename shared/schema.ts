@@ -5,26 +5,26 @@ import { z } from "zod";
 // List of valid departments for validation
 export const VALID_DEPARTMENTS = [
   "NT", "EEE", "ECE", "CSE", "ISE", "AIML", "AIDS", "MECH", 
-  "CH", "IEM", "ETE", "CVE", "BTE", "EIE"
+  "CH", "IEM", "ETE", "MBA", "MCA", "DOS"
 ];
 
 // Mapping between USN department codes and department values
 export const DEPARTMENT_CODES: Record<string, string> = {
   // Common department codes
-  "CS": "CSE",    // Computer Science
-  "EC": "ECE",    // Electronics and Communication
-  "IS": "ISE",    // Information Science
-  "EE": "EEE",    // Electrical Engineering
-  "ME": "MECH",   // Mechanical Engineering
-  "CH": "CH",     // Chemical Engineering
-  "NT": "NT",     // Nanotechnology
-  "IM": "IEM",    // Industrial Engineering and Management
-  "ET": "ETE",    // Electronics and Telecommunication
-  "CI": "AIML",   // Artificial Intelligence and Machine Learning
-  "AD": "AIDS",   // AI and Data Science
-  "CV": "CVE",    // Civil Engineering
-  "BT": "BTE",    // Biotechnology
-  "EI": "EIE",    // Electronics and Instrumentation
+  "CS": "CSE",  // Computer Science
+  "EC": "ECE",  // Electronics and Communication
+  "IS": "ISE",  // Information Science
+  "EE": "EEE",  // Electrical Engineering
+  "ME": "MECH", // Mechanical Engineering
+  "CH": "CH",   // Chemical Engineering
+  "NT": "NT",   // Nanotechnology
+  "IE": "IEM",  // Industrial Engineering
+  "ET": "ETE",  // Electronics and Telecommunication
+  "CI": "AIML", // AI and Machine Learning
+  "AD": "AIDS", // AI and Data Science
+  "MB": "MBA",  // Business Administration
+  "MC": "MCA",  // Computer Applications
+  "DO": "DOS"   // Other Studies
 };
 
 // List of top engineering colleges in Karnataka
@@ -32,7 +32,7 @@ export const KARNATAKA_COLLEGES = [
   { value: "rvce", label: "R.V. College of Engineering, Bengaluru" },
   { value: "msrit", label: "M.S. Ramaiah Institute of Technology, Bengaluru" },
   { value: "bmsce", label: "B.M.S. College of Engineering, Bengaluru" },
-  { value: "pesit", label: "PES University, Bengaluru" },
+  { value: "pesu", label: "PES University, Bengaluru" },
   { value: "dsce", label: "Dayananda Sagar College of Engineering, Bengaluru" },
   { value: "nie", label: "National Institute of Engineering, Mysuru" },
   { value: "sit", label: "Siddaganga Institute of Technology, Tumkuru" },
@@ -52,17 +52,17 @@ export const COLLEGE_CODES: Record<string, string> = {
   "RV": "rvce",    // R.V. College of Engineering
   "MS": "msrit",   // M.S. Ramaiah Institute of Technology
   "BM": "bmsce",   // B.M.S. College of Engineering
-  "PI": "pesit",    // PES Institute of Technology
+  "PE": "pesu",    // PES University
   "DS": "dsce",    // Dayananda Sagar College of Engineering
   "NI": "nie",     // National Institute of Engineering
   "SI": "sit",     // Siddaganga Institute of Technology
-  "AY": "ait",     // Acharya Institute of Technology
+  "AC": "ait",     // Acharya Institute of Technology
   "JS": "jssate",  // JSS Academy of Technical Education
-  "JB": "sjbit",   // SJB Institute of Technology
-  "JC": "sjce",    // Sri Jayachamarajendra College of Engineering
-  "NT": "nmit",    // Nitte Meenakshi Institute of Technology
-  "BD": "biet",    // Bapuji Institute of Engineering
-  "CR": "cmrit",   // CMR Institute of Technology
+  "SJ": "sjbit",   // SJB Institute of Technology
+  "SC": "sjce",    // Sri Jayachamarajendra College of Engineering
+  "NM": "nmit",    // Nitte Meenakshi Institute of Technology
+  "BI": "biet",    // Bapuji Institute of Engineering
+  "CM": "cmrit",   // CMR Institute of Technology
   "RN": "rnsit",   // RNS Institute of Technology
 };
 
@@ -82,6 +82,7 @@ export const users = pgTable("users", {
   notifyDownloads: boolean("notify_downloads").default(false),
   resetToken: text("reset_token"), // Token for password reset
   resetTokenExpiry: timestamp("reset_token_expiry"), // Expiry time for reset token
+  // Use the correct database column name but map it to the camelCase property in JavaScript
   createdAt: timestamp("created_at").defaultNow().notNull(),
   // 2FA fields
   twoFactorEnabled: boolean("two_factor_enabled").default(false),
@@ -102,11 +103,15 @@ export const notes = pgTable("notes", {
   subject: text("subject").notNull(),
   filename: text("filename").notNull(),
   originalFilename: text("original_filename").notNull(),
+  // Map database column 'uploaded_at' to JavaScript property 'uploadedAt'
   uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  // Also map the other fields in the same pattern
   isFlagged: boolean("is_flagged").default(false),
   flagReason: text("flag_reason"),
   reviewedAt: timestamp("reviewed_at"),
-  isApproved: boolean("is_approved").default(true), // Added to match code usage
+  isApproved: boolean("is_approved").default(true),
+  // Add virtual 'createdAt' field for backward compatibility
+  get createdAt() { return this.uploadedAt; },
 });
 
 // Table for bookmarking notes (feature #4)
@@ -114,6 +119,7 @@ export const bookmarks = pgTable("bookmarks", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
   noteId: integer("note_id").notNull().references(() => notes.id),
+  // Use database column created_at with camelCase JavaScript property createdAt
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -124,6 +130,7 @@ export const messages = pgTable("messages", {
   receiverId: integer("receiver_id").notNull().references(() => users.id),
   content: text("content").notNull(),
   isRead: boolean("is_read").default(false),
+  // Use database column sent_at with camelCase JavaScript property sentAt
   sentAt: timestamp("sent_at").defaultNow().notNull(),
   attachment: text("attachment"), // For file attachments (optional)
 });
@@ -132,6 +139,7 @@ export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   user1Id: integer("user1_id").notNull().references(() => users.id),
   user2Id: integer("user2_id").notNull().references(() => users.id),
+  // Use database column last_message_at with camelCase JavaScript property lastMessageAt
   lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
 });
 
@@ -149,23 +157,13 @@ export const registerUserSchema = createInsertSchema(users)
     usn: z.string()
       .refine(
         (value) => {
-          // Accept all format variations: standard, hyphenated, and comma-separated
-          // Standard format: 1SI20CS045 
-          // Hyphenated: 1SI20CI-AI045 
-          // Comma-separated: 1SI20CI,BT045
-          // Multiple comma-separated: 1SI20CI,BT,IM,CV,EI045
-          // Short formats: 22EC101, 22CI-ML101, 22CI,BT101
-          
-          // Support standard pattern with standard, hyphenated, or comma-separated department codes
-          const standardFormat = /^[0-9][A-Za-z]{2}[0-9]{2}([A-Za-z]{2}(?:[-,][A-Za-z]{2})*)[0-9]{3}$/;
-          
-          // Support short pattern (without college code) with standard, hyphenated, or comma-separated department codes
-          const shortFormat = /^[0-9]{2}([A-Za-z]{2}(?:[-,][A-Za-z]{2})*)[0-9]{3}$/;
-          
+          // Accept both standard USN format (1SI20CS045) and short format (22EC101)
+          const standardFormat = /^[0-9][A-Za-z]{2}[0-9]{2}[A-Za-z]{2}[0-9]{3}$/;
+          const shortFormat = /^[0-9]{2}[A-Za-z]{2}[0-9]{3}$/;
           return standardFormat.test(value) || shortFormat.test(value);
         },
         {
-          message: "USN must be in correct format (eg: 1SI22CI060, 1SI22CI-AI060, 1SI22CI,BT060, 22EC101)"
+          message: "USN must be in format 1SI20CS045 or 22EC101"
         }
       ),
     email: z.string()
@@ -194,11 +192,9 @@ export const registerUserSchema = createInsertSchema(users)
     path: ["confirmPassword"], 
   })
   .refine((data) => {
-    // Extract department code from USN using regex patterns with support for hyphenated codes and comma formats
-    // Standard format: 1SI20CS045 or 1SI20CI-AI045 or 1SI20CI,BT,IM,CV,EI045
-    const standardUsnPattern = /^[0-9][A-Za-z]{2}[0-9]{2}([A-Za-z]{2}(?:[-,][A-Za-z]{2})*)[0-9]{3}$/;
-    // Short format: 22EC101 or 22CI-ML101 or 22CI,BT,IM101
-    const shortUsnPattern = /^[0-9]{2}([A-Za-z]{2}(?:[-,][A-Za-z]{2})*)[0-9]{3}$/;
+    // Extract department code from USN using regex patterns
+    const standardUsnPattern = /^[0-9][A-Za-z]{2}[0-9]{2}([A-Za-z]{2})[0-9]{3}$/;
+    const shortUsnPattern = /^[0-9]{2}([A-Za-z]{2})[0-9]{3}$/;
     
     let match = data.usn.match(standardUsnPattern);
     
@@ -211,16 +207,6 @@ export const registerUserSchema = createInsertSchema(users)
     // The department code is in the first capture group for both patterns
     const usnDeptCode = match[1];
     
-    // Log for debugging
-    console.log(`Validating USN department code: '${usnDeptCode}', selected department: '${data.department}'`);
-    console.log(`Department mapping found: ${DEPARTMENT_CODES[usnDeptCode] || 'none'}`);
-    
-    // If the department code is not in our mapping, allow it to continue
-    if (!DEPARTMENT_CODES[usnDeptCode]) {
-      console.log(`Warning: Unknown department code '${usnDeptCode}' in USN.`);
-      return true;
-    }
-    
     // Check if the department code in USN matches the selected department
     return DEPARTMENT_CODES[usnDeptCode] === data.department;
   }, {
@@ -232,18 +218,13 @@ export const registerUserSchema = createInsertSchema(users)
     if (data.college === 'other') return true;
     
     // We only check college code for standard format USNs (short format doesn't have college code)
-    // Updated to handle hyphenated and comma-separated department codes with any number of comma-separated values
-    const usnPattern = /^[0-9]([A-Za-z]{2})[0-9]{2}[A-Za-z]{2}(?:[-,][A-Za-z]{2})*[0-9]{3}$/;
+    const usnPattern = /^[0-9]([A-Za-z]{2})[0-9]{2}[A-Za-z]{2}[0-9]{3}$/;
     const match = data.usn.match(usnPattern);
     
     if (!match) return true; // If not standard USN format, skip this validation
     
     // The college code is in the first capture group
     const usnCollegeCode = match[1];
-    
-    // Log for debugging
-    console.log(`Validating USN college code: '${usnCollegeCode}', selected college: '${data.college}'`);
-    console.log(`College mapping found: ${COLLEGE_CODES[usnCollegeCode] || 'none'}`);
     
     // If there's no matching college code, allow it
     if (!COLLEGE_CODES[usnCollegeCode]) return true;
@@ -260,22 +241,13 @@ export const loginUserSchema = z.object({
   usn: z.string()
     .refine(
       (value) => {
-        // Accept all format variations: standard, hyphenated, and comma-separated
-        // Standard format: 1SI20CS045 
-        // Hyphenated: 1SI20CI-AI045 
-        // Comma-separated with multiple codes: 1SI20CI,BT,IM,CV,EI045
-        // Short format variations: 22EC101, 22CI-ML101, 22CI,BT,IM101
-          
-        // Support standard pattern with standard, hyphenated, or comma-separated department codes
-        const standardFormat = /^[0-9][A-Za-z]{2}[0-9]{2}([A-Za-z]{2}(?:[-,][A-Za-z]{2})*)[0-9]{3}$/;
-          
-        // Support short pattern (without college code) with standard, hyphenated, or comma-separated department codes
-        const shortFormat = /^[0-9]{2}([A-Za-z]{2}(?:[-,][A-Za-z]{2})*)[0-9]{3}$/;
-          
+        // Accept both standard USN format (1SI20CS045) and short format (22EC101)
+        const standardFormat = /^[0-9][A-Za-z]{2}[0-9]{2}[A-Za-z]{2}[0-9]{3}$/;
+        const shortFormat = /^[0-9]{2}[A-Za-z]{2}[0-9]{3}$/;
         return standardFormat.test(value) || shortFormat.test(value);
       },
       {
-        message: "USN must be in correct format (eg: 1SI22CI060, 1SI22CI-AI060, 1SI22CI,BT060, 22EC101)"
+        message: "USN must be in format 1SI20CS045 or 22EC101"
       }
     ),
   password: z.string().min(1, "Password is required"),
@@ -408,7 +380,9 @@ export const drawings = pgTable("drawings", {
   title: text("title").notNull(),
   content: text("content"), // SVG/Canvas data
   thumbnailUrl: text("thumbnail_url"),
+  // Use database column created_at with camelCase JavaScript property createdAt
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Use database column updated_at with camelCase JavaScript property updatedAt
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   isPublic: boolean("is_public").default(false),
 });
