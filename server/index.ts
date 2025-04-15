@@ -31,6 +31,7 @@ if (process.env.CORS_ALLOW_ORIGIN) {
     'https://notezhubz.web.app',
     'https://notezhubz.firebaseapp.com',
     'https://notezhub.onrender.com',
+    'https://noteshubz.onrender.com',
     'http://localhost:3000',
     'http://localhost:5000',
     'http://localhost:5173'
@@ -68,8 +69,10 @@ app.use(cors({
       // For security in production, we should explicitly check known origins
       // This helps prevent CORS issues while maintaining security
       if (origin.includes('notezhubz.web.app') || 
+          origin.includes('notezhubz.firebaseapp.com') || 
           origin.includes('firebaseapp.com') || 
-          origin.includes('render.com')) {
+          origin.includes('render.com') ||
+          origin.includes('noteshubz.onrender.com')) {
         console.log(`Allowing production CORS request from: ${origin}`);
         return callback(null, origin); // Return the specific origin
       }
@@ -81,7 +84,8 @@ app.use(cors({
   },
   credentials: useCredentials,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cache-Control']
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cache-Control'],
+  exposedHeaders: ['Set-Cookie']
 }));
 
 // Log CORS configuration
@@ -175,7 +179,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   } else {
     // Production CSP - specifically allow cross-origin between Firebase and Render
     const frontendDomains = "https://notezhubz.web.app https://notezhubz.firebaseapp.com";
-    const backendDomains = "https://notezhub.onrender.com";
+    const backendDomains = "https://notezhub.onrender.com https://noteshubz.onrender.com";
     
     res.setHeader('Content-Security-Policy', 
       "default-src 'self'; " +
@@ -241,8 +245,10 @@ app.use((req, res, next) => {
     }
     // Check for Firebase and other known domains
     else if (origin.includes('notezhubz.web.app') || 
+             origin.includes('notezhubz.firebaseapp.com') ||
              origin.includes('firebaseapp.com') || 
-             origin.includes('render.com')) {
+             origin.includes('render.com') ||
+             origin.includes('noteshubz.onrender.com')) {
       allowOrigin = true;
       console.log(`[Custom CORS] Allowing request from known domain: ${origin}`);
     }
