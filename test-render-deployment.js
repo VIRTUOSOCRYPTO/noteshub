@@ -8,7 +8,7 @@
 // Configuration - update these values with your actual deployment URLs
 const config = {
   frontendUrl: 'https://noteshub-ocpi.onrender.com',
-  backendUrl: 'https://noteshub-api-gqkp.onrender.com',
+  backendUrl: ' https://noteshubz.onrender.com',
   firebaseUrl: 'https://notezhubz.web.app'
 };
 
