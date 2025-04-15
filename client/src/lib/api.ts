@@ -23,7 +23,7 @@ const getApiBaseUrl = (): string => {
   if (isFirebaseHosting || import.meta.env.PROD) {
     // For production with Firebase hosting + Render backend
     console.log('Using production Render backend URL');
-    return 'https://noteshub-api-gqkp.onrender.com';
+    return 'https://noteshubz.onrender.com';
   }
 
   // For development, the default is empty string which means same-origin
