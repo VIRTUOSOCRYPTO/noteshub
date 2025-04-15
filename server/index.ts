@@ -30,8 +30,10 @@ if (process.env.CORS_ALLOW_ORIGIN) {
   allowedOrigins = [
     'https://notezhubz.web.app',
     'https://notezhubz.firebaseapp.com',
-    'https://noteshubz.onrender.com',
+    'https://notezhub.onrender.com',
+    'http://localhost:3000',
     'http://localhost:5000',
+    'http://localhost:5173'
   ];
   console.log('Using default CORS origins');
 }
@@ -49,29 +51,32 @@ app.use(cors({
     
     // Check against allowedOrigins
     if (allowedOrigins.includes(origin)) {
-      return callback(null, origin);
+      console.log(`Allowing CORS request from whitelisted origin: ${origin}`);
+      return callback(null, origin); // Important: return the actual origin, not true
     }
     
     // In development, allow any origin for easier testing
     if (process.env.NODE_ENV === 'development') {
-      return callback(null, origin);
+      console.log(`Allowing CORS request in development mode from: ${origin}`);
+      return callback(null, origin); // Return the specific origin
     }
     
-    // In production, only allow specific origins
+    // In production, log the request but still be specific about origins
     if (process.env.NODE_ENV === 'production') {
-      // Check if the origin contains known domains
-      if (origin.includes('notezhubz.web.app') || 
-          origin.includes('notezhubz.firebaseapp.com') ||
-          origin.includes('noteshubz.onrender.com')) {
-        console.log(`CORS request from allowed origin: ${origin}`);
-        return callback(null, origin);
-      }
+      console.log(`CORS request from origin: ${origin}`);
       
-      console.log(`CORS request from unknown origin: ${origin}`);
-      return callback(null, origin); // Allow all origins temporarily for testing
+      // For security in production, we should explicitly check known origins
+      // This helps prevent CORS issues while maintaining security
+      if (origin.includes('notezhubz.web.app') || 
+          origin.includes('firebaseapp.com') || 
+          origin.includes('render.com')) {
+        console.log(`Allowing production CORS request from: ${origin}`);
+        return callback(null, origin); // Return the specific origin
+      }
     }
     
-    // Otherwise, block the request
+    // Log any blocked requests
+    console.log(`Blocked CORS request from: ${origin}`);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: useCredentials,
@@ -220,36 +225,53 @@ const apiLimiter = rateLimit.default({
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // If the origin is allowed, set the ACAO header to the specific origin
-  // This is important because with credentials, wildcard origins aren't allowed
+  // If the origin is present, we need to handle CORS carefully
   if (origin) {
-    // In development, allow any origin
+    let allowOrigin = false;
+    
+    // In development mode, allow any origin
     if (process.env.NODE_ENV === 'development') {
-      res.setHeader('Access-Control-Allow-Origin', origin);
+      allowOrigin = true;
+      console.log(`[Custom CORS] Allowing dev request from: ${origin}`);
     } 
-    // In production, check against allowed origins
+    // Explicitly check for allowed origins in any environment
+    else if (allowedOrigins.includes(origin)) {
+      allowOrigin = true;
+      console.log(`[Custom CORS] Allowing request from whitelisted origin: ${origin}`);
+    }
+    // Check for Firebase and other known domains
+    else if (origin.includes('notezhubz.web.app') || 
+             origin.includes('firebaseapp.com') || 
+             origin.includes('render.com')) {
+      allowOrigin = true;
+      console.log(`[Custom CORS] Allowing request from known domain: ${origin}`);
+    }
+    // In production, we can be slightly more permissive
     else if (process.env.NODE_ENV === 'production') {
-      // Check if origin matches our allowed domains
-      if (origin.includes('notezhubz.web.app') || 
-          origin.includes('notezhubz.firebaseapp.com') ||
-          origin.includes('notezhub.onrender.com')) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-      } else {
-        // For unknown origins in production, log them but still allow
-        // This helps with debugging while in development
-        console.log('Custom CORS: Unknown origin in production:', origin);
-        res.setHeader('Access-Control-Allow-Origin', origin);
-      }
+      // You can add additional logic here if needed
+      console.log(`[Custom CORS] Allowing production request from: ${origin}`);
+      allowOrigin = true;
     }
     
-    // Add additional CORS headers for preflight requests
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+    // Only set CORS headers if we decided to allow this origin
+    if (allowOrigin) {
+      // Always use the specific origin, never a wildcard (*) when credentials are involved
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+    } else {
+      console.log(`[Custom CORS] Blocked request from: ${origin}`);
+    }
     
     // Handle preflight requests
     if (req.method === 'OPTIONS') {
-      return res.status(204).send();
+      if (allowOrigin) {
+        return res.status(204).send();
+      } else {
+        // For blocked origins, send a proper error
+        return res.status(403).json({ error: 'CORS not allowed for this origin' });
+      }
     }
   }
   
