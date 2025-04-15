@@ -47,9 +47,15 @@ export async function apiRequest(
   // Use the secure fetch implementation with certificate pinning
   const res = await apiFetch(fullUrl, {
     method,
-    headers: data && !isFormData ? { "Content-Type": "application/json" } : {},
+    headers: data && !isFormData 
+      ? { 
+          "Content-Type": "application/json",
+          "Origin": window.location.origin
+        } 
+      : { "Origin": window.location.origin },
     body: data ? (isFormData ? data : JSON.stringify(data)) : undefined,
     credentials: "include",
+    mode: "cors"
   });
 
   await throwIfResNotOk(res);
@@ -74,16 +80,24 @@ export const getQueryFn: <T>(options: {
     // Get auth token if available
     const token = localStorage.getItem('auth_token');
     const headers: HeadersInit = token 
-      ? { 'Authorization': `Bearer ${token}` }
-      : {};
+      ? { 
+          'Authorization': `Bearer ${token}`,
+          'Origin': window.location.origin
+        }
+      : { 
+          'Origin': window.location.origin 
+        };
         
-    // Always use 'include' mode for cookies support with proper CORS
+    // Always use 'include' credentials mode to ensure cookies/auth are sent
+    // This is needed for cross-origin requests (Firebase frontend to Render backend)
     const credentialsMode = 'include';
     
     // Use the secure fetch implementation with certificate pinning
     const res = await apiFetch(fullUrl, {
       credentials: credentialsMode,
-      headers
+      headers,
+      // Explicitly set mode to 'cors' for cross-origin requests
+      mode: 'cors'
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
@@ -134,16 +148,18 @@ export const authenticateWithGoogle = async (email: string, idToken: string) => 
     const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
     const url = `${baseUrl}/api/auth/google`;
     
-    // Always use 'include' mode for cookies support with proper CORS
+    // Always use 'include' credentials mode for consistency
     const credentialsMode = 'include';
     
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Origin': window.location.origin
       },
       body: JSON.stringify({ idToken, email }),
-      credentials: credentialsMode
+      credentials: credentialsMode,
+      mode: 'cors'
     });
     
     if (!response.ok) {
