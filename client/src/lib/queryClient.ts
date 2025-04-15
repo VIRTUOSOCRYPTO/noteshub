@@ -77,9 +77,8 @@ export const getQueryFn: <T>(options: {
       ? { 'Authorization': `Bearer ${token}` }
       : {};
         
-    // In production, use 'same-origin' credentials mode to avoid CORS issues
-    // In development, keep 'include' mode for local testing with cookies
-    const credentialsMode = import.meta.env.PROD ? 'same-origin' : 'include';
+    // Always use 'include' mode for cookies support with proper CORS
+    const credentialsMode = 'include';
     
     // Use the secure fetch implementation with certificate pinning
     const res = await apiFetch(fullUrl, {
@@ -135,8 +134,8 @@ export const authenticateWithGoogle = async (email: string, idToken: string) => 
     const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
     const url = `${baseUrl}/api/auth/google`;
     
-    // In production, use same-origin credentials mode to avoid CORS issues
-    const credentialsMode = import.meta.env.PROD ? 'same-origin' : 'include';
+    // Always use 'include' mode for cookies support with proper CORS
+    const credentialsMode = 'include';
     
     const response = await fetch(url, {
       method: 'POST',
