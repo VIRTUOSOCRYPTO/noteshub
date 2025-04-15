@@ -21,33 +21,23 @@ app.set('trust proxy', 1);
 
 // Define allowed origins for CORS - either from environment variable or hardcoded defaults
 let allowedOrigins: string[];
-// Check multiple environment variable formats for flexibility
-if (process.env.CORS_ALLOWED_ORIGINS || process.env.CORS_ALLOW_ORIGIN) {
-  // Get from either variable format
-  const originsEnvVar = process.env.CORS_ALLOWED_ORIGINS || process.env.CORS_ALLOW_ORIGIN;
+if (process.env.CORS_ALLOW_ORIGIN) {
   // Use origins from environment variable
-  allowedOrigins = originsEnvVar!.split(',').map(origin => origin.trim());
+  allowedOrigins = process.env.CORS_ALLOW_ORIGIN.split(',');
   console.log('Using CORS origins from environment:', allowedOrigins);
 } else {
   // Use hardcoded defaults
   allowedOrigins = [
     'https://notezhubz.web.app',
     'https://notezhubz.firebaseapp.com',
-    'https://notezhub.onrender.com',
-    'https://noteshub-ocpi.onrender.com',
-    'https://noteshub-api-gqkp.onrender.com',
-    'http://localhost:3000',
+    'https://noteshubz.onrender.com',
     'http://localhost:5000',
-    'http://localhost:5173',
-    'http://127.0.0.1:5173'
   ];
   console.log('Using default CORS origins');
 }
 
 // Use credentials from environment variable or default to true
-// Check multiple variable formats for flexibility
-const useCredentials = process.env.CORS_ALLOW_CREDENTIALS !== 'false' && 
-                       process.env.CORS_CREDENTIALS !== 'false'; // default to true unless explicitly set to 'false'
+const useCredentials = process.env.CORS_CREDENTIALS !== 'false'; // default to true unless explicitly set to 'false'
 
 // Configure CORS using the package with explicit origins and credentials
 app.use(cors({
@@ -57,41 +47,34 @@ app.use(cors({
       return callback(null, true);
     }
     
-    // IMPORTANT: NEVER use wildcard with credentials
-    // If it's a request from any origin, always return the specific origin
-    // This is critical for CORS to work with credentials
-    
-    // Check against allowedOrigins first
+    // Check against allowedOrigins
     if (allowedOrigins.includes(origin)) {
-      console.log(`CORS: Allowing whitelisted origin: ${origin}`);
       return callback(null, origin);
     }
     
     // In development, allow any origin for easier testing
     if (process.env.NODE_ENV === 'development') {
-      console.log(`CORS: Allowing development origin: ${origin}`);
       return callback(null, origin);
     }
     
-    // In production, be lenient to avoid blocking legitimate requests
+    // In production, only allow specific origins
     if (process.env.NODE_ENV === 'production') {
-      console.log(`CORS: Allowing production request from: ${origin}`);
-      return callback(null, origin);
-    }
-    
-    // Explicitly check Firebase and Render origins
-    if (origin.includes('web.app') || 
-        origin.includes('firebaseapp.com') || 
-        origin.includes('onrender.com')) {
-      console.log(`CORS: Allowing hosting platform origin: ${origin}`);
-      return callback(null, origin);
+      // Check if the origin contains known domains
+      if (origin.includes('notezhubz.web.app') || 
+          origin.includes('notezhubz.firebaseapp.com') ||
+          origin.includes('noteshubz.onrender.com')) {
+        console.log(`CORS request from allowed origin: ${origin}`);
+        return callback(null, origin);
+      }
+      
+      console.log(`CORS request from unknown origin: ${origin}`);
+      return callback(null, origin); // Allow all origins temporarily for testing
     }
     
     // Otherwise, block the request
-    console.log(`CORS: Blocked origin: ${origin}`);
     callback(new Error('Not allowed by CORS'));
   },
-  credentials: true, // Always use credentials: true
+  credentials: useCredentials,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'Cache-Control']
 }));
@@ -101,18 +84,9 @@ console.log(`CORS configuration: ${allowedOrigins.length} origins, credentials: 
 
 app.use(express.json());
 
-// Sample Routes - add variants of test and status endpoints
+// Sample Route
 app.get('/test', (req, res) => {
   res.json({ message: 'CORS is working!' });
-});
-
-// Add test endpoint at /api/test to match the path pattern of other endpoints
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    message: 'API Test endpoint is working!',
-    cors: 'If you can see this, CORS is configured correctly',
-    credentials: 'enabled'
-  });
 });
 
 // Import needed modules
@@ -123,17 +97,35 @@ import { sql, db, isFallbackStorage as dbFallbackCheck } from './db';
 app.get('/api/db-status', (req, res) => {
   try {
     // Check if using fallback storage
-    const usingFallback = isFallbackStorage();
+    const usingFallback = isFallbackStorage() || dbFallbackCheck();
     
-    // Simple response without database query to avoid potential errors
-    res.json({
-      status: usingFallback ? 'warning' : 'ok',
-      message: usingFallback 
-        ? 'Using in-memory storage as fallback. Data will not persist across restarts.' 
-        : 'Database connection is configured',
-      fallback: usingFallback,
-      databaseUrl: process.env.DATABASE_URL ? 'configured' : 'missing'
-    });
+    if (usingFallback) {
+      res.json({
+        status: 'warning',
+        message: 'Using in-memory storage as fallback. Data will not persist across restarts.',
+        fallback: true
+      });
+    } else {
+      // Try to run a test query to verify connection
+      sql`SELECT 1 as test`
+        .then((result: any) => {
+          res.json({
+            status: 'ok',
+            message: 'Database connection is active',
+            fallback: false,
+            test_result: result
+          });
+        })
+        .catch((dbError: any) => {
+          console.error('Database test query failed:', dbError);
+          res.status(500).json({
+            status: 'error',
+            message: 'Database connection test failed',
+            error: dbError.message,
+            code: dbError.code
+          });
+        });
+    }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error in db-status endpoint:', error);
@@ -143,84 +135,6 @@ app.get('/api/db-status', (req, res) => {
       error: errorMessage
     });
   }
-});
-
-// Add multiple variants of database status endpoints for maximum compatibility
-// These are backup endpoints in case the main one doesn't work on Render
-app.get('/api/db-check', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Database status check endpoint'
-  });
-});
-
-// Alternative paths for db status
-app.get('/api/dbstatus', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Alternative database status endpoint',
-    db: process.env.DATABASE_URL ? 'configured' : 'not configured'
-  });
-});
-
-app.get('/api/status', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'API status endpoint',
-    database: process.env.DATABASE_URL ? 'configured' : 'not configured',
-    time: new Date().toISOString()
-  });
-});
-
-// Similar to /api/test, just returning simple status
-app.get('/api/ping', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'API is responding',
-    time: new Date().toISOString()
-  });
-});
-
-// Special endpoint for testing CORS with credentials
-// This endpoint will echo back all request headers and origin information
-app.get('/api/cors-test', (req, res) => {
-  // Get origin from request
-  const origin = req.headers.origin || 'no origin';
-  
-  // Get important headers for debugging
-  const headers = {
-    host: req.headers.host,
-    origin: req.headers.origin,
-    referer: req.headers.referer,
-    'user-agent': req.headers['user-agent'],
-    'content-type': req.headers['content-type'],
-    'access-control-request-method': req.headers['access-control-request-method'],
-    'access-control-request-headers': req.headers['access-control-request-headers'],
-  };
-  
-  // Get response headers that were set
-  const responseHeaders = {
-    'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
-    'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials'),
-    'access-control-allow-methods': res.getHeader('Access-Control-Allow-Methods'),
-    'access-control-allow-headers': res.getHeader('Access-Control-Allow-Headers'),
-  };
-  
-  // Get cookies (sanitized for security)
-  const hasCookies = req.headers.cookie ? true : false;
-  
-  // Echo back information
-  res.json({
-    message: 'CORS test endpoint',
-    cors: {
-      origin: origin,
-      receivedHeaders: headers,
-      responseHeaders: responseHeaders,
-      hasCookies: hasCookies
-    },
-    environment: process.env.NODE_ENV,
-    timestamp: new Date().toISOString()
-  });
 });
 
 
@@ -255,8 +169,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     );
   } else {
     // Production CSP - specifically allow cross-origin between Firebase and Render
-    const frontendDomains = "https://notezhubz.web.app https://notezhubz.firebaseapp.com https://noteshub-ocpi.onrender.com";
-    const backendDomains = "https://notezhub.onrender.com https://noteshub-api-gqkp.onrender.com";
+    const frontendDomains = "https://notezhubz.web.app https://notezhubz.firebaseapp.com";
+    const backendDomains = "https://notezhub.onrender.com";
     
     res.setHeader('Content-Security-Policy', 
       "default-src 'self'; " +
@@ -302,52 +216,41 @@ const apiLimiter = rateLimit.default({
   }
 });
 
-// Enhanced CORS middleware for maximum compatibility across different browsers and environments
+// Custom CORS headers middleware for better compatibility
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Debug log to trace CORS issues
-  console.log(`CORS middleware: Processing request from origin: ${origin || 'no origin'}, path: ${req.path}`);
-  
-  // ALWAYS set CORS headers for all requests (not just those with origin)
-  // This helps in some environments where the origin might be stripped
-  
-  // If there's a specific origin, use it; otherwise use a permissive default for non-credential requests
+  // If the origin is allowed, set the ACAO header to the specific origin
+  // This is important because with credentials, wildcard origins aren't allowed
   if (origin) {
-    // For requests with origin header, explicitly set the origin
-    // This is critical for CORS to work with credentials
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    console.log(`CORS middleware: Set Access-Control-Allow-Origin to ${origin}`);
-  } else {
-    // For requests without origin, we still set a default
-    // This is for non-credential cases
+    // In development, allow any origin
     if (process.env.NODE_ENV === 'development') {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      console.log(`CORS middleware: Set Access-Control-Allow-Origin to * (development mode)`);
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } 
+    // In production, check against allowed origins
+    else if (process.env.NODE_ENV === 'production') {
+      // Check if origin matches our allowed domains
+      if (origin.includes('notezhubz.web.app') || 
+          origin.includes('notezhubz.firebaseapp.com') ||
+          origin.includes('notezhub.onrender.com')) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      } else {
+        // For unknown origins in production, log them but still allow
+        // This helps with debugging while in development
+        console.log('Custom CORS: Unknown origin in production:', origin);
+        res.setHeader('Access-Control-Allow-Origin', origin);
+      }
     }
-  }
-  
-  // ALWAYS set credentials to true for all requests
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  console.log(`CORS middleware: Set Access-Control-Allow-Credentials to true`);
-  
-  // Set Vary header to instruct cache logic correctly
-  res.setHeader('Vary', 'Origin');
-  
-  // More comprehensive list of allowed headers
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
-  res.setHeader('Access-Control-Allow-Headers', 
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Auth-Token, X-CSRF-Token, ' +
-    'Cache-Control, X-Requested-With, If-None-Match, X-Client-Version, X-Api-Key, Pragma'
-  );
-  
-  // Allow browsers to cache CORS result longer (1 hour)
-  res.setHeader('Access-Control-Max-Age', '3600');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    console.log(`CORS middleware: Responding to preflight request from ${origin || 'unknown origin'}`);
-    return res.status(204).end();
+    
+    // Add additional CORS headers for preflight requests
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
+    
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+      return res.status(204).send();
+    }
   }
   
   next();
