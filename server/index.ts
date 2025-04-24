@@ -32,9 +32,7 @@ if (process.env.CORS_ALLOW_ORIGIN) {
     'https://notezhubz.firebaseapp.com',
     'https://notezhub.onrender.com',
     'https://noteshubz.onrender.com',
-    'http://localhost:3000',
-    'http://localhost:5000',
-    'http://localhost:5173'
+    'http://localhost:5000'
   ];
   console.log('Using default CORS origins');
 }
